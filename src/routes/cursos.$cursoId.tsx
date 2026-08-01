@@ -1,5 +1,5 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ArrowLeft, FileText, Images, Printer, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { useApp } from "@/lib/store";
@@ -27,7 +27,8 @@ const TABS = ["Estudiantes", "Documentos", "Config Curso"] as const;
 function CursoDetalle() {
   const { cursoId } = Route.useParams();
   const curso = useApp((s) => s.cursos.find((c) => c.id === cursoId));
-  const estudiantes = useApp((s) => s.estudiantes.filter((e) => e.cursoId === cursoId));
+  const todos = useApp((s) => s.estudiantes);
+  const estudiantes = useMemo(() => todos.filter((e) => e.cursoId === cursoId), [todos, cursoId]);
   const config = useApp((s) => s.config);
   const setFase = useApp((s) => s.setFase);
   const [tab, setTab] = useState<(typeof TABS)[number]>("Estudiantes");
