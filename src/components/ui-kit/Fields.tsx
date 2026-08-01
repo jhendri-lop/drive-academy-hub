@@ -18,7 +18,7 @@ export function FormSection({ title, children }: { title: string; children: Reac
 const fieldBase =
   "h-9 w-full rounded-md border bg-input px-3 text-[13px] outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-primary focus:ring-2 focus:ring-primary/25 disabled:opacity-60";
 
-function Label({ children, required }: { children: ReactNode; required?: boolean }) {
+function Label({ children, required }: { children: ReactNode; required?: boolean | undefined }) {
   return (
     <span className="mb-1 block text-[11px] font-medium text-muted-foreground">
       {children}
@@ -148,7 +148,7 @@ export function TextAreaField({
   label,
   colSpan = 3,
   ...props
-}: TextAreaHTMLAttributes<HTMLTextAreaElement> & { label: string; colSpan?: 1 | 2 | 3 }) {
+}: TextareaHTMLAttributes<HTMLTextAreaElement> & { label: string; colSpan?: 1 | 2 | 3 }) {
   return (
     <label className={cn(colSpan === 2 && "col-span-2", colSpan === 3 && "col-span-3")}>
       <Label>{label}</Label>
