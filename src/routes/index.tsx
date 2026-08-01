@@ -56,7 +56,7 @@ function Dashboard() {
               <Badge tone={c.estado === "En curso" ? "success" : c.estado === "Matrículas" ? "warning" : "muted"}>{c.estado}</Badge>
               <Badge tone="primary">Fase {c.faseActual}</Badge>
               <span className="text-[12px] text-muted-foreground">
-                {useApp.getState().estudiantes.filter((e) => e.cursoId === c.id).length} alumnos
+                {estudiantes.filter((e) => e.cursoId === c.id).length} alumnos
               </span>
               <Link
                 to="/cursos/$cursoId"
