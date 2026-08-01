@@ -53,8 +53,6 @@ const CARDS: { id: Seccion; icon: typeof Building2; desc: string }[] = [
   { id: "Tema y Colores", icon: Palette, desc: "Modo y paleta del sistema" },
 ];
 
-export default function noop() {}
-
 function ConfiguracionPage() {
   const config = useApp((s) => s.config);
   const updateConfig = useApp((s) => s.updateConfig);
@@ -299,7 +297,10 @@ function CrudInstructores({ cols }: { cols: Column<Instructor>[] }) {
         <div className="col-span-2 flex items-end">
           <button
             onClick={() => {
-              if (!n.nombre.trim()) return toast.error("Ingrese el nombre");
+              if (!n.nombre.trim()) {
+                toast.error("Ingrese el nombre");
+                return;
+              }
               updateConfig({
                 instructores: [
                   ...config.instructores,
@@ -333,7 +334,10 @@ function CrudVehiculos({ cols }: { cols: Column<Vehiculo>[] }) {
         <div className="col-span-3">
           <button
             onClick={() => {
-              if (!n.placas.trim()) return toast.error("Ingrese las placas");
+              if (!n.placas.trim()) {
+                toast.error("Ingrese las placas");
+                return;
+              }
               updateConfig({ vehiculos: [...config.vehiculos, { ...n, id: crypto.randomUUID() }] });
               setN({ numero: "", placas: "", modelo: "" });
             }}
