@@ -1,4 +1,4 @@
-export type TipoLicencia = "B" | "C" | "D" | "E" | "F";
+export type TipoLicencia = "A" | "A1" | "B" | "C" | "C1" | "D" | "E" | "F" | "G";
 export type FormaPago = "Efectivo" | "Transferencia" | "Tarjeta";
 
 export interface Instructor {
@@ -7,6 +7,7 @@ export interface Instructor {
   cedula: string;
   tipo: "Teórico" | "Práctico";
   telefono: string;
+  materiaTeorica?: "Educación Vial" | "Mecánica Básica" | "Primeros Auxilios" | "Psicología" | string;
 }
 
 export interface Vehiculo {
@@ -14,6 +15,8 @@ export interface Vehiculo {
   numero: string;
   placas: string;
   modelo: string;
+  instructorId?: string;
+  instructorNombre?: string;
 }
 
 export interface Estudiante {
@@ -21,6 +24,7 @@ export interface Estudiante {
   cursoId: string;
   nombres: string;
   cedula: string;
+  tipoDocumento?: "Cédula" | "Pasaporte";
   nacionalidad: string;
   tipoSangre: string;
   rh: string;
@@ -31,6 +35,7 @@ export interface Estudiante {
   canton: string;
   celular: string;
   correo: string;
+  horarioTeoria?: string;
   horarioPractica: string;
   vehiculoId: string;
   instructorPracticoId: string;
@@ -40,11 +45,15 @@ export interface Estudiante {
   saldo: number;
   formaPago: FormaPago;
   comprobante: string;
+  comprobanteImg?: string;
   fotoUrl: string;
   nivelInstruccion: string;
   observaciones: string;
+  lentes?: string;
+  fechaMatricula?: string;
   estado: "Activo" | "Retirado" | "Graduado";
   reciboNumero: number;
+  numeroPermiso?: string;
   fecha: string;
 }
 
@@ -59,9 +68,10 @@ export interface Curso {
   horarioTeoria: string;
   horarioPractica: string;
   horarioPsicologia: string;
-  instructorTeoricoId: string;
+  instructorTeoricoId?: string;
   vehiculosIds: string[];
-  oficioInicial: number;
+  oficioInicial?: number;
+  customDocsRoot?: string;
   faseActual: 1 | 2 | 3 | 4;
   estado: "Matrículas" | "En curso" | "Finalizado";
 }
@@ -92,16 +102,15 @@ export interface Config {
     resolucion: string;
     logoUrl: string;
   };
-  firmas: Record<
-    "director" | "secretaria" | "directorAnt" | "representante",
-    { nombre: string; cargo: string }
-  >;
+  firmas: Record<string, { nombre: string; cargo: string }>;
   instructores: Instructor[];
   vehiculos: Vehiculo[];
   precios: Record<string, number>;
   secuenciales: { recibos: number; actas: number; oficios: number };
   logoDocs: Record<string, boolean>;
+  watermarkDocs: Record<string, boolean>;
   watermark: boolean;
+  customDocsRoot?: string;
 }
 
 export const TIPOS_SANGRE = ["O+", "A+", "B+", "AB+", "O-", "A-", "B-", "AB-"];

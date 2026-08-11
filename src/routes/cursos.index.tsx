@@ -1,26 +1,17 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { Link } from "react-router-dom";
 import { useState } from "react";
-import { Plus, Users } from "lucide-react";
+import { Plus, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useApp } from "@/lib/store";
 import { Badge, Panel, PhaseButton } from "@/components/ui-kit/Primitives";
 import { CrearCursoModal } from "@/components/CrearCursoModal";
+import { ConfirmModal } from "@/components/ConfirmModal";
+import type { Curso } from "@/lib/types";
 
-export const Route = createFileRoute("/cursos/")({
-  head: () => ({
-    meta: [
-      { title: "Cursos — Drive Academy" },
-      { name: "description", content: "Listado de cursos de conducción con fases, cupos y estudiantes matriculados." },
-      { property: "og:title", content: "Cursos — Drive Academy" },
-      { property: "og:description", content: "Gestione cursos, fases y matrículas de la escuela." },
-    ],
-  }),
-  component: CursosPage,
-});
-
-function CursosPage() {
-  const { cursos, estudiantes, setFase } = useApp();
+export default function CursosPage() {
+  const { cursos, estudiantes, setFase, deleteCurso } = useApp();
   const [open, setOpen] = useState(false);
+  const [cursoAEliminar, setCursoAEliminar] = useState<Curso | null>(null);
 
   return (
     <div className="space-y-6">
@@ -47,7 +38,21 @@ function CursosPage() {
                   <h2 className="text-[14px] font-semibold">{c.nombre}</h2>
                   <p className="text-[11px] text-muted-foreground">Licencia tipo {c.tipoLicencia}</p>
                 </div>
-                <Badge tone={c.estado === "En curso" ? "success" : c.estado === "Matrículas" ? "warning" : "muted"}>{c.estado}</Badge>
+                <div className="flex items-center gap-2">
+                  <Badge tone={c.estado === "En curso" ? "success" : c.estado === "Matrículas" ? "warning" : "muted"}>{c.estado}</Badge>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setCursoAEliminar(c);
+                    }}
+                    title="Eliminar curso"
+                    className="rounded-full p-1 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
 
               <dl className="grid grid-cols-2 gap-y-1 text-[12px]">
@@ -74,9 +79,8 @@ function CursosPage() {
               </div>
 
               <Link
-                to="/cursos/$cursoId"
-                params={{ cursoId: c.id }}
-                className="mt-auto flex items-center justify-center gap-1.5 rounded-md border border-primary/40 py-2 text-[12px] font-medium text-primary transition-colors hover:bg-primary/10"
+                to={`/cursos/${c.id}`}
+                className="btn-3d-secondary mt-auto flex items-center justify-center gap-1.5 rounded-full py-2 text-[12px] font-semibold"
               >
                 <Users size={13} /> Ver estudiantes →
               </Link>
@@ -86,6 +90,23 @@ function CursosPage() {
       </div>
 
       <CrearCursoModal open={open} onClose={() => setOpen(false)} />
+
+      <ConfirmModal
+        open={!!cursoAEliminar}
+        title="¿Estás seguro que deseas eliminar este curso?"
+        itemName={cursoAEliminar?.nombre}
+        description={`Se eliminará el curso "${cursoAEliminar?.nombre}" y todos sus alumnos inscritos. Esta acción no afectará a los documentos ya guardados en disco.`}
+        confirmText="Sí, Eliminar Curso"
+        cancelText="Cancelar"
+        onConfirm={() => {
+          if (cursoAEliminar) {
+            deleteCurso(cursoAEliminar.id);
+            toast.success(`Curso "${cursoAEliminar.nombre}" eliminado exitosamente.`);
+            setCursoAEliminar(null);
+          }
+        }}
+        onClose={() => setCursoAEliminar(null)}
+      />
     </div>
   );
 }

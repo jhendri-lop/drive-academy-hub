@@ -1,12 +1,16 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Config, Curso, Estudiante, Recibo } from "./types";
+import { FuzzySearchService } from "@/infrastructure/search/FuzzySearchService";
+
+import { SQLiteCourseRepository } from "@/infrastructure/database/repositories/SQLiteCourseRepository";
+import { SQLiteStudentRepository } from "@/infrastructure/database/repositories/SQLiteStudentRepository";
 
 const hoy = new Date().toISOString().slice(0, 10);
 
 const defaultConfig: Config = {
   escuela: {
-    nombre: "Drive Academy",
+    nombre: "Zentriumph-DriveOfice",
     ruc: "1791234567001",
     sucursal: "Matriz",
     direccion: "Av. Amazonas N34-120",
@@ -14,8 +18,8 @@ const defaultConfig: Config = {
     canton: "Quito",
     telefono: "02 250 4477",
     correo: "info@driveacademy.ec",
-    resolucion: "ANT-DE-2024-0187",
-    logoUrl: "",
+    resolucion: "18 DCTS-ANT-2013",
+    logoUrl: "/logo.jpg",
   },
   firmas: {
     director: { nombre: "Ing. Marco Villacís", cargo: "Director General" },
@@ -24,148 +28,28 @@ const defaultConfig: Config = {
     representante: { nombre: "Sr. Jorge Bastidas", cargo: "Representante Legal" },
   },
   instructores: [
-    { id: "i1", nombre: "Carlos Andrade", cedula: "1718293045", tipo: "Teórico", telefono: "0991234567" },
-    { id: "i2", nombre: "Diana Moreta", cedula: "1712345678", tipo: "Práctico", telefono: "0987654321" },
-    { id: "i3", nombre: "Pedro Cajas", cedula: "1701928374", tipo: "Práctico", telefono: "0961122334" },
+    { id: "i1", nombre: "Francisco Ortuño", cedula: "1718293045", tipo: "Teórico", materiaTeorica: "Educación Vial", telefono: "0991234567" },
+    { id: "i2", nombre: "Mario Peralvo", cedula: "1715432189", tipo: "Teórico", materiaTeorica: "Mecánica Básica", telefono: "0998877665" },
+    { id: "i3", nombre: "Dr. Rafael Parra", cedula: "1709876543", tipo: "Teórico", materiaTeorica: "Primeros Auxilios", telefono: "0981122334" },
+    { id: "i4", nombre: "Luis De La Torre", cedula: "1711223344", tipo: "Teórico", materiaTeorica: "Psicología", telefono: "0975544332" },
+    { id: "i5", nombre: "Diana Moreta", cedula: "1712345678", tipo: "Práctico", telefono: "0987654321" },
+    { id: "i6", nombre: "Pedro Cajas", cedula: "1701928374", tipo: "Práctico", telefono: "0961122334" },
   ],
   vehiculos: [
     { id: "v1", numero: "01", placas: "PCA-1234", modelo: "Chevrolet Aveo 2021" },
     { id: "v2", numero: "02", placas: "PBX-5566", modelo: "Kia Rio 2022" },
     { id: "v3", numero: "03", placas: "PDG-8899", modelo: "Hyundai Accent 2020" },
   ],
-  precios: { B: 420, C: 560, D: 680, E: 780, F: 500, Psicosensometrico: 35 },
+  precios: { A: 250, A1: 300, B: 420, C: 560, C1: 600, D: 680, E: 780, F: 500, G: 550, Psicosensometrico: 35 },
   secuenciales: { recibos: 1001, actas: 200, oficios: 350 },
   logoDocs: { recibo: true, oficios: true, fichas: true, actas: true, certificados: true, listados: false },
+  watermarkDocs: {},
   watermark: false,
 };
 
-const cursosDemo: Curso[] = [
-  {
-    id: "c1",
-    nombre: "Curso B-2026-01",
-    tipoLicencia: "B",
-    inicioMatriculas: "2026-07-01",
-    finMatriculas: "2026-07-20",
-    inicioCurso: "2026-07-25",
-    finCurso: "2026-09-25",
-    horarioTeoria: "Lunes a Viernes 18H00-20H00",
-    horarioPractica: "14H00-16H00",
-    horarioPsicologia: "Sábado 08H00-12H00",
-    instructorTeoricoId: "i1",
-    vehiculosIds: ["v1", "v2"],
-    oficioInicial: 350,
-    faseActual: 2,
-    estado: "En curso",
-  },
-  {
-    id: "c2",
-    nombre: "Curso C-2026-02",
-    tipoLicencia: "C",
-    inicioMatriculas: "2026-08-01",
-    finMatriculas: "2026-08-22",
-    inicioCurso: "2026-08-28",
-    finCurso: "2026-11-05",
-    horarioTeoria: "Sábados 08H00-13H00",
-    horarioPractica: "09H00-11H00",
-    horarioPsicologia: "Sábado 08H00-12H00",
-    instructorTeoricoId: "i1",
-    vehiculosIds: ["v3"],
-    oficioInicial: 372,
-    faseActual: 1,
-    estado: "Matrículas",
-  },
-];
-
-const estudiantesDemo: Estudiante[] = [
-  {
-    id: "e1",
-    cursoId: "c1",
-    nombres: "María Fernanda Loor",
-    cedula: "1723456789",
-    nacionalidad: "Ecuatoriana",
-    tipoSangre: "O+",
-    rh: "Positivo",
-    sexo: "Femenino",
-    fechaNacimiento: "1998-04-12",
-    edad: 28,
-    direccion: "Calle Los Ríos 234",
-    canton: "Quito",
-    celular: "0998877665",
-    correo: "mf.loor@gmail.com",
-    horarioPractica: "14H00-16H00",
-    vehiculoId: "v1",
-    instructorPracticoId: "i2",
-    concepto: "Curso Tipo B",
-    valorTotal: 420,
-    abono: 200,
-    saldo: 220,
-    formaPago: "Efectivo",
-    comprobante: "",
-    fotoUrl: "",
-    nivelInstruccion: "Superior",
-    observaciones: "",
-    estado: "Activo",
-    reciboNumero: 1001,
-    fecha: hoy,
-  },
-  {
-    id: "e2",
-    cursoId: "c1",
-    nombres: "Juan Carlos Pérez",
-    cedula: "1712233445",
-    nacionalidad: "Ecuatoriana",
-    tipoSangre: "A+",
-    rh: "Positivo",
-    sexo: "Masculino",
-    fechaNacimiento: "1995-11-30",
-    edad: 30,
-    direccion: "Av. 6 de Diciembre 1122",
-    canton: "Quito",
-    celular: "0977665544",
-    correo: "jc.perez@gmail.com",
-    horarioPractica: "16H00-18H00",
-    vehiculoId: "v2",
-    instructorPracticoId: "i3",
-    concepto: "Curso Tipo B",
-    valorTotal: 420,
-    abono: 420,
-    saldo: 0,
-    formaPago: "Transferencia",
-    comprobante: "TRF-99231",
-    fotoUrl: "",
-    nivelInstruccion: "Bachiller",
-    observaciones: "Cancela completo",
-    estado: "Activo",
-    reciboNumero: 1002,
-    fecha: hoy,
-  },
-];
-
-const recibosDemo: Recibo[] = [
-  {
-    id: "r1",
-    numero: 1001,
-    estudiante: "María Fernanda Loor",
-    cedula: "1723456789",
-    concepto: "Curso Tipo B",
-    monto: 200,
-    metodo: "Efectivo",
-    curso: "Curso B-2026-01",
-    fecha: hoy,
-  },
-  {
-    id: "r2",
-    numero: 1002,
-    estudiante: "Juan Carlos Pérez",
-    cedula: "1712233445",
-    concepto: "Curso Tipo B",
-    monto: 420,
-    metodo: "Transferencia",
-    curso: "Curso B-2026-01",
-    fecha: hoy,
-    comprobante: "TRF-99231",
-  },
-];
+const cursosDemo: Curso[] = [];
+const estudiantesDemo: Estudiante[] = [];
+const recibosDemo: Recibo[] = [];
 
 export type Palette = "azul" | "verde" | "naranja" | "rojo";
 
@@ -180,9 +64,12 @@ interface AppState {
   setTheme: (t: "dark" | "light") => void;
   setPalette: (p: Palette) => void;
   addCurso: (c: Omit<Curso, "id">) => void;
+  updateCurso: (id: string, c: Partial<Curso>) => void;
+  deleteCurso: (id: string) => void;
   setFase: (cursoId: string, fase: 1 | 2 | 3 | 4) => void;
   addEstudiante: (e: Omit<Estudiante, "id" | "reciboNumero" | "fecha">) => Estudiante;
   updateEstudiante: (id: string, e: Partial<Estudiante>) => void;
+  deleteEstudiante: (id: string) => void;
   addRecibo: (r: Omit<Recibo, "id" | "numero" | "fecha">) => void;
   updateConfig: (c: Partial<Config>) => void;
 }
@@ -199,7 +86,43 @@ export const useApp = create<AppState>()(
       config: defaultConfig,
       setTheme: (theme) => set({ theme }),
       setPalette: (palette) => set({ palette }),
-      addCurso: (c) => set((s) => ({ cursos: [...s.cursos, { ...c, id: crypto.randomUUID() }] })),
+      addCurso: (c) => {
+        const id = crypto.randomUUID();
+        const nuevoCurso = { ...c, id };
+        set((s) => {
+          const cursos = [...s.cursos, nuevoCurso];
+          const newConfig = c.customDocsRoot ? { ...s.config, customDocsRoot: c.customDocsRoot } : s.config;
+          FuzzySearchService.getInstance().setDataset(s.estudiantes, cursos);
+          return { cursos, config: newConfig };
+        });
+      },
+      updateCurso: (id, c) =>
+        set((s) => {
+          const cursos = s.cursos.map((x) => (x.id === id ? { ...x, ...c } : x));
+          const newConfig = c.customDocsRoot ? { ...s.config, customDocsRoot: c.customDocsRoot } : s.config;
+          FuzzySearchService.getInstance().setDataset(s.estudiantes, cursos);
+          return { cursos, config: newConfig };
+        }),
+      deleteCurso: (id) => {
+        try {
+          const sqliteCourseRepo = new SQLiteCourseRepository();
+          const sqliteStudentRepo = new SQLiteStudentRepository();
+          sqliteCourseRepo.delete(id).catch((e) => console.warn("Error eliminando curso en SQLite:", e));
+          const studentsToDelete = get().estudiantes.filter((e) => e.cursoId === id || String(e.cursoId) === String(id));
+          studentsToDelete.forEach((st) => {
+            sqliteStudentRepo.delete(st.id).catch((e) => console.warn("Error eliminando estudiante de curso en SQLite:", e));
+          });
+        } catch (err) {
+          console.warn("Excepción sqlite deleteCurso:", err);
+        }
+
+        set((s) => {
+          const cursos = s.cursos.filter((x) => x.id !== id && String(x.id) !== String(id));
+          const estudiantes = s.estudiantes.filter((e) => e.cursoId !== id && String(e.cursoId) !== String(id));
+          FuzzySearchService.getInstance().setDataset(estudiantes, cursos);
+          return { cursos, estudiantes };
+        });
+      },
       setFase: (cursoId, fase) =>
         set((s) => ({
           cursos: s.cursos.map((c) => (c.id === cursoId ? { ...c, faseActual: fase } : c)),
@@ -213,30 +136,50 @@ export const useApp = create<AppState>()(
           fecha: new Date().toISOString().slice(0, 10),
         };
         const curso = get().cursos.find((c) => c.id === e.cursoId);
-        set((s) => ({
-          estudiantes: [...s.estudiantes, nuevo],
-          recibos: [
-            ...s.recibos,
-            {
-              id: crypto.randomUUID(),
-              numero,
-              estudiante: e.nombres,
-              cedula: e.cedula,
-              concepto: e.concepto,
-              monto: e.abono,
-              metodo: e.formaPago,
-              curso: curso?.nombre ?? "—",
-              fecha: nuevo.fecha,
-              comprobante: e.comprobante,
-            },
-          ],
-        }));
+        set((s) => {
+          const estudiantes = [...s.estudiantes, nuevo];
+          FuzzySearchService.getInstance().setDataset(estudiantes, s.cursos);
+          return {
+            estudiantes,
+            recibos: [
+              ...s.recibos,
+              {
+                id: crypto.randomUUID(),
+                numero,
+                estudiante: e.nombres,
+                cedula: e.cedula,
+                concepto: e.concepto,
+                monto: e.abono,
+                metodo: e.formaPago,
+                curso: curso?.nombre ?? "—",
+                fecha: nuevo.fecha,
+                comprobante: e.comprobante,
+              },
+            ],
+          };
+        });
         return nuevo;
       },
       updateEstudiante: (id, e) =>
-        set((s) => ({
-          estudiantes: s.estudiantes.map((x) => (x.id === id ? { ...x, ...e } : x)),
-        })),
+        set((s) => {
+          const estudiantes = s.estudiantes.map((x) => (x.id === id ? { ...x, ...e } : x));
+          FuzzySearchService.getInstance().setDataset(estudiantes, s.cursos);
+          return { estudiantes };
+        }),
+      deleteEstudiante: (id) => {
+        try {
+          const sqliteStudentRepo = new SQLiteStudentRepository();
+          sqliteStudentRepo.delete(id).catch((e) => console.warn("Error eliminando estudiante en SQLite:", e));
+        } catch (err) {
+          console.warn("Excepción sqlite deleteEstudiante:", err);
+        }
+
+        set((s) => {
+          const estudiantes = s.estudiantes.filter((x) => x.id !== id && String(x.id) !== String(id));
+          FuzzySearchService.getInstance().setDataset(estudiantes, s.cursos);
+          return { estudiantes };
+        });
+      },
       addRecibo: (r) =>
         set((s) => ({
           recibos: [
@@ -251,6 +194,13 @@ export const useApp = create<AppState>()(
         })),
       updateConfig: (c) => set((s) => ({ config: { ...s.config, ...c } })),
     }),
-    { name: "drive-academy" },
+    {
+      name: "zentriumph-driveofice",
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          FuzzySearchService.getInstance().setDataset(state.estudiantes, state.cursos);
+        }
+      },
+    },
   ),
 );

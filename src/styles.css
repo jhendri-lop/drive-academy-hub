@@ -95,23 +95,36 @@
 
 /* ---- Paletas de color ---- */
 [data-palette="azul"] {
-  --primary: oklch(0.62 0.19 256);
+  --primary: #3b82f6;
+  --color-primary: #3b82f6;
+  --ring: #3b82f6;
+  --color-ring: #3b82f6;
+  --primary-foreground: #ffffff;
+  --color-primary-foreground: #ffffff;
 }
 [data-palette="verde"] {
-  --primary: oklch(0.7 0.15 163);
+  --primary: #10b981;
+  --color-primary: #10b981;
+  --ring: #10b981;
+  --color-ring: #10b981;
+  --primary-foreground: #022c22;
+  --color-primary-foreground: #022c22;
 }
 [data-palette="naranja"] {
-  --primary: oklch(0.77 0.16 70);
+  --primary: #f59e0b;
+  --color-primary: #f59e0b;
+  --ring: #f59e0b;
+  --color-ring: #f59e0b;
+  --primary-foreground: #451a03;
+  --color-primary-foreground: #451a03;
 }
 [data-palette="rojo"] {
-  --primary: oklch(0.63 0.23 27);
-}
-[data-palette="naranja"],
-[data-palette="verde"] {
-  --primary-foreground: oklch(0.2 0.03 260);
-}
-[data-palette="rojo"] {
-  --primary-foreground: oklch(0.99 0 0);
+  --primary: #ef4444;
+  --color-primary: #ef4444;
+  --ring: #ef4444;
+  --color-ring: #ef4444;
+  --primary-foreground: #ffffff;
+  --color-primary-foreground: #ffffff;
 }
 
 @layer base {
@@ -147,3 +160,95 @@
   color: var(--color-muted-foreground);
   text-transform: uppercase;
 }
+
+/* ---- ESTILOS GLOBALES DE BOTONES 3D PILL (GLOSSY BUTTONS) ---- */
+button,
+.btn-3d-secondary {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Botones Principales (.bg-primary) */
+.bg-primary,
+button.bg-primary,
+button[type="submit"] {
+  border-radius: 9999px !important;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--primary) 80%, #ffffff) 0%,
+    var(--primary) 50%,
+    color-mix(in srgb, var(--primary) 70%, #000000) 100%
+  ) !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  border: 1px solid color-mix(in srgb, var(--primary) 65%, #ffffff) !important;
+  box-shadow: 
+    0 3px 8px rgba(0, 0, 0, 0.25),
+    inset 0 1.5px 1.5px rgba(255, 255, 255, 0.65),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.3) !important;
+}
+
+.bg-primary:hover,
+button.bg-primary:hover,
+button[type="submit"]:hover {
+  transform: translateY(-1px) scale(1.02);
+  filter: brightness(1.08);
+  box-shadow: 
+    0 5px 14px rgba(0, 0, 0, 0.32),
+    inset 0 2px 2px rgba(255, 255, 255, 0.85),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.35) !important;
+}
+
+.bg-primary:active,
+button.bg-primary:active,
+button[type="submit"]:active {
+  transform: translateY(1px) scale(0.98);
+  filter: brightness(0.92);
+  box-shadow: 
+    inset 0 2px 4px rgba(0, 0, 0, 0.5),
+    0 1px 3px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Botones Secundarios y Acciones 3D (Editar, Guardar Recibo, Ver todos, Volver a cursos) */
+.btn-3d-secondary,
+button.border,
+button.border-primary {
+  border-radius: 9999px !important;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--primary) 18%, #ffffff) 0%,
+    color-mix(in srgb, var(--primary) 8%, #ffffff) 48%,
+    color-mix(in srgb, var(--primary) 22%, #e2e8f0) 100%
+  ) !important;
+  color: var(--primary) !important;
+  font-weight: 600 !important;
+  border: 1px solid color-mix(in srgb, var(--primary) 50%, var(--border)) !important;
+  box-shadow: 
+    0 2px 5px rgba(0, 0, 0, 0.08),
+    inset 0 1px 1px rgba(255, 255, 255, 0.85),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.08) !important;
+}
+
+.dark .btn-3d-secondary {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--primary) 30%, #1e293b) 0%,
+    color-mix(in srgb, var(--primary) 20%, #0f172a) 48%,
+    color-mix(in srgb, var(--primary) 35%, #020617) 100%
+  ) !important;
+  color: color-mix(in srgb, var(--primary) 85%, #ffffff) !important;
+  border-color: color-mix(in srgb, var(--primary) 50%, rgba(255, 255, 255, 0.2)) !important;
+}
+
+.btn-3d-secondary:hover,
+button.border:hover,
+button.border-primary:hover {
+  transform: translateY(-1px) scale(1.02);
+  filter: brightness(1.08);
+  border-color: var(--primary) !important;
+  box-shadow: 
+    0 4px 12px color-mix(in srgb, var(--primary) 30%, transparent),
+    inset 0 1.5px 1.5px rgba(255, 255, 255, 0.9) !important;
+}
+

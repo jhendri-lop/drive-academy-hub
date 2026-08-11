@@ -12,14 +12,25 @@ export const PALETAS: { id: Palette; nombre: string; hex: string }[] = [
 export function ThemeToggle() {
   const theme = useApp((s) => s.theme);
   const setTheme = useApp((s) => s.setTheme);
+
   return (
     <button
       onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-      className="flex h-8 items-center gap-2 rounded-md border px-2.5 text-[11px] font-medium transition-colors hover:border-primary hover:text-primary"
+      className="flex h-8 items-center gap-2 rounded-md border border-border px-3 text-[12px] font-medium transition-colors hover:border-primary hover:text-primary bg-surface text-foreground"
       aria-label="Cambiar tema"
+      title={theme === "dark" ? "Cambiar a Modo Claro" : "Cambiar a Modo Oscuro"}
     >
-      {theme === "dark" ? <Moon size={14} /> : <Sun size={14} />}
-      {theme === "dark" ? "Oscuro" : "Claro"}
+      {theme === "dark" ? (
+        <>
+          <Moon size={14} className="text-blue-400" />
+          <span>Oscuro</span>
+        </>
+      ) : (
+        <>
+          <Sun size={14} className="text-amber-500" />
+          <span>Claro</span>
+        </>
+      )}
     </button>
   );
 }
@@ -35,12 +46,12 @@ export function ColorPicker({ compact = false }: { compact?: boolean }) {
           onClick={() => setPalette(p.id)}
           title={p.nombre}
           className={cn(
-            "flex items-center gap-2 rounded-md border p-1 transition-all",
-            palette === p.id ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-primary/50",
-            compact ? "" : "px-2 py-1.5",
+            "flex items-center gap-2 rounded-md border p-1 transition-all bg-surface text-foreground",
+            palette === p.id ? "border-primary ring-2 ring-primary/40 font-bold" : "border-border hover:border-primary/50",
+            compact ? "" : "px-2.5 py-1.5",
           )}
         >
-          <span className="h-4 w-4 rounded-full" style={{ backgroundColor: p.hex }} />
+          <span className="h-3.5 w-3.5 rounded-full shadow-sm" style={{ backgroundColor: p.hex }} />
           {!compact && <span className="text-[11px]">{p.nombre}</span>}
         </button>
       ))}

@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS courses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    course_name TEXT NOT NULL,
+    license_type TEXT NOT NULL CHECK(license_type IN ('B', 'C', 'D', 'E', 'F')),
+    start_enrollment_date DATE NOT NULL,
+    end_enrollment_date DATE NOT NULL,
+    start_course_date DATE NOT NULL,
+    end_course_date DATE NOT NULL,
+    theory_schedule TEXT NOT NULL,
+    practice_schedule_range TEXT,
+    psychology_schedule TEXT DEFAULT 'Sábado 08H00-12H00',
+    theory_instructor_id INTEGER,
+    oficio_prefix TEXT DEFAULT 'ALERTA',
+    oficio_year INTEGER,
+    oficio_start_number INTEGER DEFAULT 1,
+    permiso_start_number TEXT,
+    fase_actual INTEGER DEFAULT 1 CHECK(fase_actual BETWEEN 1 AND 4),
+    status TEXT DEFAULT 'Activo' CHECK(status IN ('Activo', 'Matrículas', 'En curso', 'Cerrado', 'Graduado')),
+    folder_path TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (theory_instructor_id) REFERENCES instructors(id) ON DELETE SET NULL
+);

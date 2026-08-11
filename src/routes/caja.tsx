@@ -1,4 +1,3 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Banknote, CreditCard, FileDown, Landmark, Wallet } from "lucide-react";
 import { toast } from "sonner";
@@ -8,20 +7,9 @@ import { DataTable, type Column } from "@/components/ui-kit/DataTable";
 import { Modal } from "@/components/ui-kit/Modal";
 import { FileUpload, FormSection, InputField, SelectField } from "@/components/ui-kit/Fields";
 import type { FormaPago, Recibo } from "@/lib/types";
+import { CierreCajaReport } from "@/components/CierreCajaReport";
 
-export const Route = createFileRoute("/caja")({
-  head: () => ({
-    meta: [
-      { title: "Caja — Drive Academy" },
-      { name: "description", content: "Recibos del día, cobros psicosensométricos y cierre de caja de la escuela." },
-      { property: "og:title", content: "Caja — Drive Academy" },
-      { property: "og:description", content: "Control diario de ingresos por efectivo, transferencia y tarjeta." },
-    ],
-  }),
-  component: CajaPage,
-});
-
-function CajaPage() {
+export default function CajaPage() {
   const recibos = useApp((s) => s.recibos);
   const addRecibo = useApp((s) => s.addRecibo);
   const precioPsico = useApp((s) => s.config.precios["Psicosensometrico"] ?? 35);
@@ -101,6 +89,8 @@ function CajaPage() {
       </div>
 
       <DataTable rows={delDia} columns={columns} empty="Sin movimientos hoy" />
+
+      <CierreCajaReport recibos={recibos} />
 
       <Modal
         open={open}

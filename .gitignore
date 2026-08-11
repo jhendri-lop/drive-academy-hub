@@ -15,6 +15,13 @@ dist-ssr
 .tanstack/**
 .nitro
 *.local
+.env
+.env.*
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+src-tauri/target/
 
 # Wrangler / Cloudflare
 .wrangler/

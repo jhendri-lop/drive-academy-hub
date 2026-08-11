@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS vehicles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vehicle_number TEXT NOT NULL,
+    plates TEXT NOT NULL UNIQUE,
+    model TEXT NOT NULL,
+    status TEXT DEFAULT 'Activo',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

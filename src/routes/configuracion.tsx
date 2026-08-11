@@ -1,4 +1,3 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   Building2,
@@ -9,6 +8,7 @@ import {
   Palette,
   PenLine,
   Users,
+  Terminal,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useApp } from "@/lib/store";
@@ -20,45 +20,61 @@ import { ColorPicker, ThemeToggle } from "@/components/ui-kit/Theme";
 import type { Instructor, Vehiculo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/configuracion")({
-  head: () => ({
-    meta: [
-      { title: "Configuración — Drive Academy" },
-      { name: "description", content: "Datos de la escuela, firmas, instructores, vehículos, precios, secuenciales y tema." },
-      { property: "og:title", content: "Configuración — Drive Academy" },
-      { property: "og:description", content: "Parametrice su escuela de conducción y la documentación generada." },
-    ],
-  }),
-  component: ConfiguracionPage,
-});
+import { CustomFieldsView } from "@/components/CustomFieldsView";
+import { LogoDocsConfig } from "@/components/LogoDocsConfig";
+import { TemplateCommandsView } from "@/components/TemplateCommandsView";
+import { DirectivaConfig } from "@/components/DirectivaConfig";
+import { Sliders } from "lucide-react";
+
+import { SQLiteClient } from "@/infrastructure/database/SQLiteClient";
 
 type Seccion =
   | "Datos Escuela"
-  | "Firmas"
+  | "Directiva"
   | "Instructores"
   | "Vehículos"
   | "Precios"
   | "Secuenciales"
+  | "Campos Personalizados"
   | "Logo en Documentos"
+  | "Comandos y Etiquetas"
   | "Tema y Colores";
 
 const CARDS: { id: Seccion; icon: typeof Building2; desc: string }[] = [
   { id: "Datos Escuela", icon: Building2, desc: "Nombre, RUC, dirección y logo" },
-  { id: "Firmas", icon: PenLine, desc: "Responsables de los documentos" },
-  { id: "Instructores", icon: Users, desc: "Teóricos y prácticos" },
+  { id: "Directiva", icon: PenLine, desc: "Directivos, autoridades y firmas" },
+  { id: "Instructores", icon: Users, desc: "Teóricos y prácticos con asignación de materias" },
   { id: "Vehículos", icon: Car, desc: "Flota de práctica" },
   { id: "Precios", icon: DollarSign, desc: "Valores por tipo de licencia" },
   { id: "Secuenciales", icon: Hash, desc: "Recibos, actas y oficios" },
+  { id: "Campos Personalizados", icon: Sliders, desc: "Atributos adicionales editables" },
   { id: "Logo en Documentos", icon: ImageIcon, desc: "Dónde imprimir el logo" },
+  { id: "Comandos y Etiquetas", icon: Terminal, desc: "Copia rápida de marcadores Word y Excel" },
   { id: "Tema y Colores", icon: Palette, desc: "Modo y paleta del sistema" },
 ];
 
-function ConfiguracionPage() {
+export default function ConfiguracionPage() {
   const config = useApp((s) => s.config);
   const updateConfig = useApp((s) => s.updateConfig);
   const [abierta, setAbierta] = useState<Seccion | null>(null);
 
-  const guardar = () => {
+  const guardar = async () => {
+    if (abierta === "Logo en Documentos") {
+      try {
+        const client = SQLiteClient.getInstance();
+        const logoDocs = config.logoDocs || {};
+        const watermarkDocs = config.watermarkDocs || {};
+        for (const key of Object.keys(logoDocs)) {
+          await client.execute(
+            `INSERT INTO logo_documents (document_name, show_logo, show_watermark) VALUES (?, ?, ?)
+             ON CONFLICT(document_name) DO UPDATE SET show_logo = excluded.show_logo, show_watermark = excluded.show_watermark;`,
+            [key, logoDocs[key] ? 1 : 0, watermarkDocs[key] ? 1 : 0]
+          );
+        }
+      } catch (err) {
+        console.error("Error guardando logoDocs a SQLite:", err);
+      }
+    }
     toast.success("Configuración guardada");
     setAbierta(null);
   };
@@ -67,6 +83,11 @@ function ConfiguracionPage() {
     { key: "nombre", header: "Nombre" },
     { key: "cedula", header: "Cédula" },
     { key: "tipo", header: "Tipo" },
+    {
+      key: "materiaTeorica",
+      header: "Materia / Clase",
+      value: (r) => (r.tipo === "Teórico" ? r.materiaTeorica || "Educación Vial" : "-"),
+    },
     { key: "telefono", header: "Teléfono" },
     {
       key: "acciones",
@@ -87,6 +108,42 @@ function ConfiguracionPage() {
     { key: "numero", header: "Número" },
     { key: "placas", header: "Placas" },
     { key: "modelo", header: "Modelo" },
+    {
+      key: "instructorId",
+      header: "Profesor asignado",
+      render: (r) => {
+        const instructores = config.instructores || [];
+        const practicos = instructores.filter((i) => i.tipo === "Práctico" || /prác/i.test(i.tipo || ""));
+        const listaInst = practicos.length > 0 ? practicos : instructores;
+        return (
+          <select
+            value={r.instructorId || ""}
+            onChange={(e) => {
+              const selectedInstId = e.target.value;
+              const found = instructores.find((inst) => inst.id === selectedInstId);
+              const updated = config.vehiculos.map((v) =>
+                v.id === r.id
+                  ? {
+                      ...v,
+                      instructorId: selectedInstId,
+                      instructorNombre: found ? found.nombre : "",
+                    }
+                  : v
+              );
+              updateConfig({ vehiculos: updated });
+            }}
+            className="h-8 w-full min-w-[140px] rounded-md border border-input bg-background px-2 text-[12px] focus:outline-none focus:ring-1 focus:ring-primary"
+          >
+            <option value="">-- Sin asignar --</option>
+            {listaInst.map((inst) => (
+              <option key={inst.id} value={inst.id}>
+                {inst.nombre}
+              </option>
+            ))}
+          </select>
+        );
+      },
+    },
     {
       key: "acciones",
       header: "",
@@ -127,7 +184,7 @@ function ConfiguracionPage() {
         open={abierta !== null}
         onClose={() => setAbierta(null)}
         title={abierta ?? ""}
-        size={abierta === "Instructores" || abierta === "Vehículos" ? "md" : "lg"}
+        size={abierta === "Instructores" ? "md" : "lg"}
         footer={
           <>
             <button onClick={() => setAbierta(null)} className="rounded-md border px-3 py-1.5 text-[12px] hover:bg-accent">
@@ -172,30 +229,8 @@ function ConfiguracionPage() {
           </FormSection>
         )}
 
-        {abierta === "Firmas" && (
-          <FormSection title="Responsables">
-            {(
-              [
-                ["director", "Director"],
-                ["secretaria", "Secretaria"],
-                ["directorAnt", "Director ANT"],
-                ["representante", "Representante Legal"],
-              ] as const
-            ).map(([k, label]) => (
-              <div key={k} className="col-span-3 grid grid-cols-2 gap-4">
-                <InputField
-                  label={`${label} — Nombre`}
-                  value={config.firmas[k].nombre}
-                  onChange={(e) => updateConfig({ firmas: { ...config.firmas, [k]: { ...config.firmas[k], nombre: e.target.value } } })}
-                />
-                <InputField
-                  label={`${label} — Cargo`}
-                  value={config.firmas[k].cargo}
-                  onChange={(e) => updateConfig({ firmas: { ...config.firmas, [k]: { ...config.firmas[k], cargo: e.target.value } } })}
-                />
-              </div>
-            ))}
-          </FormSection>
+        {abierta === "Directiva" && (
+          <DirectivaConfig />
         )}
 
         {abierta === "Instructores" && (
@@ -205,13 +240,13 @@ function ConfiguracionPage() {
         {abierta === "Vehículos" && <CrudVehiculos cols={vehiculoCols} />}
 
         {abierta === "Precios" && (
-          <FormSection title="Valores en USD">
-            {Object.entries(config.precios).map(([k, v]) => (
+          <FormSection title="VALORES EN USD">
+            {(["A", "A1", "B", "C", "C1", "D", "E", "F", "G", "Psicosensometrico"] as const).map((k) => (
               <InputField
                 key={k}
                 label={k === "Psicosensometrico" ? "Psicosensométrico" : `Licencia tipo ${k}`}
                 type="number"
-                value={v}
+                value={config.precios[k] ?? (k === "A" ? 250 : k === "A1" ? 300 : k === "B" ? 420 : k === "C" ? 560 : k === "C1" ? 600 : k === "D" ? 680 : k === "E" ? 780 : k === "F" ? 500 : k === "G" ? 550 : 35)}
                 onChange={(e) => updateConfig({ precios: { ...config.precios, [k]: Number(e.target.value) } })}
               />
             ))}
@@ -232,28 +267,16 @@ function ConfiguracionPage() {
           </FormSection>
         )}
 
+        {abierta === "Campos Personalizados" && (
+          <CustomFieldsView />
+        )}
+
         {abierta === "Logo en Documentos" && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-2">
-              {Object.entries(config.logoDocs).map(([k, v]) => (
-                <label
-                  key={k}
-                  className={cn("flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-[12px] capitalize", v && "border-primary bg-primary/10")}
-                >
-                  <input
-                    type="checkbox"
-                    checked={v}
-                    onChange={() => updateConfig({ logoDocs: { ...config.logoDocs, [k]: !v } })}
-                  />
-                  {k}
-                </label>
-              ))}
-            </div>
-            <label className="flex cursor-pointer items-center gap-2 text-[12px]">
-              <input type="checkbox" checked={config.watermark} onChange={() => updateConfig({ watermark: !config.watermark })} />
-              Usar logo como marca de agua
-            </label>
-          </div>
+          <LogoDocsConfig />
+        )}
+
+        {abierta === "Comandos y Etiquetas" && (
+          <TemplateCommandsView />
         )}
 
         {abierta === "Tema y Colores" && (
@@ -276,7 +299,13 @@ function ConfiguracionPage() {
 function CrudInstructores({ cols }: { cols: Column<Instructor>[] }) {
   const config = useApp((s) => s.config);
   const updateConfig = useApp((s) => s.updateConfig);
-  const [n, setN] = useState({ nombre: "", cedula: "", tipo: "Práctico", telefono: "" });
+  const [n, setN] = useState({
+    nombre: "",
+    cedula: "",
+    tipo: "Teórico",
+    materiaTeorica: "Educación Vial",
+    telefono: "",
+  });
 
   return (
     <div className="space-y-4">
@@ -294,6 +323,19 @@ function CrudInstructores({ cols }: { cols: Column<Instructor>[] }) {
             { value: "Práctico", label: "Práctico" },
           ]}
         />
+        {n.tipo === "Teórico" && (
+          <SelectField
+            label="Materia / Clase"
+            value={n.materiaTeorica}
+            onChange={(v) => setN({ ...n, materiaTeorica: v })}
+            options={[
+              { value: "Educación Vial", label: "Educación Vial" },
+              { value: "Mecánica Básica", label: "Mecánica Básica" },
+              { value: "Primeros Auxilios", label: "Primeros Auxilios" },
+              { value: "Psicología", label: "Psicología" },
+            ]}
+          />
+        )}
         <div className="col-span-2 flex items-end">
           <button
             onClick={() => {
@@ -304,10 +346,15 @@ function CrudInstructores({ cols }: { cols: Column<Instructor>[] }) {
               updateConfig({
                 instructores: [
                   ...config.instructores,
-                  { ...n, tipo: n.tipo as Instructor["tipo"], id: crypto.randomUUID() },
+                  {
+                    ...n,
+                    tipo: n.tipo as Instructor["tipo"],
+                    materiaTeorica: n.tipo === "Teórico" ? n.materiaTeorica : undefined,
+                    id: crypto.randomUUID(),
+                  },
                 ],
               });
-              setN({ nombre: "", cedula: "", tipo: "Práctico", telefono: "" });
+              setN({ nombre: "", cedula: "", tipo: "Teórico", materiaTeorica: "Educación Vial", telefono: "" });
             }}
             className="h-9 rounded-md bg-primary px-3 text-[12px] font-semibold text-primary-foreground hover:opacity-90"
           >
@@ -322,7 +369,11 @@ function CrudInstructores({ cols }: { cols: Column<Instructor>[] }) {
 function CrudVehiculos({ cols }: { cols: Column<Vehiculo>[] }) {
   const config = useApp((s) => s.config);
   const updateConfig = useApp((s) => s.updateConfig);
-  const [n, setN] = useState({ numero: "", placas: "", modelo: "" });
+  const [n, setN] = useState({ numero: "", placas: "", modelo: "", instructorId: "" });
+
+  const instructores = config.instructores || [];
+  const practicos = instructores.filter((i) => i.tipo === "Práctico" || /prác/i.test(i.tipo || ""));
+  const listaInst = practicos.length > 0 ? practicos : instructores;
 
   return (
     <div className="space-y-4">
@@ -331,6 +382,18 @@ function CrudVehiculos({ cols }: { cols: Column<Vehiculo>[] }) {
         <InputField label="Número" value={n.numero} onChange={(e) => setN({ ...n, numero: e.target.value })} />
         <InputField label="Placas" value={n.placas} onChange={(e) => setN({ ...n, placas: e.target.value.toUpperCase() })} />
         <InputField label="Modelo" value={n.modelo} onChange={(e) => setN({ ...n, modelo: e.target.value })} />
+        <SelectField
+          label="Profesor asignado"
+          value={n.instructorId}
+          onChange={(e: any) => {
+            const val = typeof e === "string" ? e : e?.target?.value || "";
+            setN({ ...n, instructorId: val });
+          }}
+          options={[
+            { label: "-- Sin asignar --", value: "" },
+            ...listaInst.map((inst) => ({ label: inst.nombre, value: inst.id })),
+          ]}
+        />
         <div className="col-span-3">
           <button
             onClick={() => {
@@ -338,8 +401,18 @@ function CrudVehiculos({ cols }: { cols: Column<Vehiculo>[] }) {
                 toast.error("Ingrese las placas");
                 return;
               }
-              updateConfig({ vehiculos: [...config.vehiculos, { ...n, id: crypto.randomUUID() }] });
-              setN({ numero: "", placas: "", modelo: "" });
+              const found = instructores.find((inst) => inst.id === n.instructorId);
+              updateConfig({
+                vehiculos: [
+                  ...config.vehiculos,
+                  {
+                    ...n,
+                    id: crypto.randomUUID(),
+                    instructorNombre: found ? found.nombre : "",
+                  },
+                ],
+              });
+              setN({ numero: "", placas: "", modelo: "", instructorId: "" });
             }}
             className="h-9 rounded-md bg-primary px-3 text-[12px] font-semibold text-primary-foreground hover:opacity-90"
           >

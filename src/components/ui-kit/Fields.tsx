@@ -1,6 +1,6 @@
 import type { ReactNode, InputHTMLAttributes, TextareaHTMLAttributes } from "react";
-import { useRef, useState } from "react";
-import { Calendar, Upload, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Calendar, ChevronDown, Upload, X, ZoomIn, ZoomOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function FormSection({ title, children }: { title: string; children: ReactNode }) {
@@ -47,7 +47,7 @@ interface SelectFieldProps {
   label: string;
   value: string;
   onChange: (v: string) => void;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; disabled?: boolean }[];
   required?: boolean;
   allowOther?: boolean;
   error?: string;
@@ -87,7 +87,7 @@ export function SelectField({
       >
         <option value="">{placeholder}</option>
         {options.map((o) => (
-          <option key={o.value} value={o.value}>
+          <option key={o.value} value={o.value} disabled={o.disabled}>
             {o.label}
           </option>
         ))}
@@ -111,35 +111,26 @@ export function DateField({
   value,
   onChange,
   required,
+  error,
   colSpan = 1,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   required?: boolean;
+  error?: string;
   colSpan?: 1 | 2 | 3;
 }) {
-  const ref = useRef<HTMLInputElement>(null);
   return (
     <div className={cn(colSpan === 2 && "col-span-2", colSpan === 3 && "col-span-3")}>
       <Label required={required}>{label}</Label>
-      <div className="relative">
-        <input
-          ref={ref}
-          type="date"
-          className={cn(fieldBase, "pr-9")}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        />
-        <button
-          type="button"
-          onClick={() => ref.current?.showPicker?.()}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary"
-          aria-label="Abrir calendario"
-        >
-          <Calendar size={14} />
-        </button>
-      </div>
+      <input
+        type="date"
+        className={cn(fieldBase, error && "border-destructive")}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {error && <span className="mt-1 block text-[11px] text-destructive">{error}</span>}
     </div>
   );
 }
@@ -160,6 +151,312 @@ export function TextAreaField({
   );
 }
 
+function InteractivePhotoCropper({
+  rawImage,
+  onChange,
+  onClear,
+  onOpenPicker,
+}: {
+  rawImage: string;
+  onChange: (croppedDataUrl: string) => void;
+  onClear: () => void;
+  onOpenPicker: () => void;
+}) {
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [imgDimensions, setImgDimensions] = useState<{ baseW: number; baseH: number }>({
+    baseW: 96,
+    baseH: 128,
+  });
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  const containerWidth = 96;
+  const containerHeight = 128;
+
+  // Calcular dimensiones exactas de cobertura para el marco 3x4
+  const handleImageLoad = () => {
+    if (!imgRef.current) return;
+    const img = imgRef.current;
+    if (img.naturalWidth === 0 || img.naturalHeight === 0) return;
+
+    const imgAspect = img.naturalWidth / img.naturalHeight;
+    const boxAspect = containerWidth / containerHeight;
+
+    let bw = containerWidth;
+    let bh = containerHeight;
+    if (imgAspect > boxAspect) {
+      bh = containerHeight;
+      bw = containerHeight * imgAspect;
+    } else {
+      bw = containerWidth;
+      bh = containerWidth / imgAspect;
+    }
+
+    setImgDimensions({ baseW: bw, baseH: bh });
+    updateCroppedResult(scale, position, bw, bh);
+  };
+
+  const clampPosition = useCallback(
+    (rawX: number, rawY: number, currentScale: number, bw = imgDimensions.baseW, bh = imgDimensions.baseH) => {
+      const renderedW = bw * currentScale;
+      const renderedH = bh * currentScale;
+
+      const maxOffsetX = Math.max(0, (renderedW - containerWidth) / 2);
+      const maxOffsetY = Math.max(0, (renderedH - containerHeight) / 2);
+
+      return {
+        x: Math.max(-maxOffsetX, Math.min(maxOffsetX, rawX)),
+        y: Math.max(-maxOffsetY, Math.min(maxOffsetY, rawY)),
+      };
+    },
+    [containerWidth, containerHeight, imgDimensions]
+  );
+
+  const updateCroppedResult = useCallback(
+    (currentScale: number, currentPos: { x: number; y: number }, bw = imgDimensions.baseW, bh = imgDimensions.baseH) => {
+      if (!rawImage || !imgRef.current) return;
+      const img = imgRef.current;
+      if (!img.complete || img.naturalWidth === 0) return;
+
+      const canvas = document.createElement("canvas");
+      const targetW = 300;
+      const targetH = 400;
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, targetW, targetH);
+
+      const ratio = targetW / containerWidth;
+
+      const drawW = bw * currentScale * ratio;
+      const drawH = bh * currentScale * ratio;
+
+      const centerX = targetW / 2;
+      const centerY = targetH / 2;
+
+      const drawX = centerX - drawW / 2 + currentPos.x * ratio;
+      const drawY = centerY - drawH / 2 + currentPos.y * ratio;
+
+      ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+      try {
+        const croppedDataUrl = canvas.toDataURL("image/jpeg", 0.92);
+        onChange(croppedDataUrl);
+      } catch (err) {
+        console.warn("[PhotoCropper] Error exportando canvas:", err);
+      }
+    },
+    [rawImage, onChange, containerWidth, imgDimensions]
+  );
+
+  // Actualizar canvas únicamente cuando termina el arrastre o cambia escala/posición
+  useEffect(() => {
+    if (!isDragging && imgRef.current && imgRef.current.complete) {
+      updateCroppedResult(scale, position);
+    }
+  }, [isDragging, scale, position, updateCroppedResult]);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    e.preventDefault();
+    const rawX = e.clientX - dragStart.x;
+    const rawY = e.clientY - dragStart.y;
+    const clamped = clampPosition(rawX, rawY, scale);
+    setPosition(clamped);
+  };
+
+  const handleMouseUp = () => {
+    if (isDragging) {
+      setIsDragging(false);
+      const clamped = clampPosition(position.x, position.y, scale);
+      updateCroppedResult(scale, clamped);
+    }
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
+    const newScale = Math.min(Math.max(0.5, scale * zoomFactor), 6.0);
+    const clamped = clampPosition(position.x, position.y, newScale);
+    setScale(newScale);
+    setPosition(clamped);
+    updateCroppedResult(newScale, clamped);
+  };
+
+  const zoomIn = () => {
+    const newScale = Math.min(scale * 1.15, 6.0);
+    const clamped = clampPosition(position.x, position.y, newScale);
+    setScale(newScale);
+    setPosition(clamped);
+    updateCroppedResult(newScale, clamped);
+  };
+
+  const zoomOut = () => {
+    const newScale = Math.max(scale / 1.15, 0.5);
+    const clamped = clampPosition(position.x, position.y, newScale);
+    setScale(newScale);
+    setPosition(clamped);
+    updateCroppedResult(newScale, clamped);
+  };
+
+  const resetPos = () => {
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+    updateCroppedResult(1, { x: 0, y: 0 });
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-1.5 select-none">
+      <div className="relative">
+        <div
+          ref={containerRef}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          onWheel={handleWheel}
+          style={{ width: `${containerWidth}px`, height: `${containerHeight}px` }}
+          className={cn(
+            "relative overflow-hidden rounded-md border-2 border-primary/70 bg-black/90 shadow-md transition-shadow",
+            isDragging ? "cursor-grabbing" : "cursor-grab"
+          )}
+          title="Arrastre para mover · Rueda del mouse para zoom"
+        >
+          <img
+            ref={imgRef}
+            src={rawImage}
+            alt="Foto estudiante"
+            draggable={false}
+            onLoad={handleImageLoad}
+            style={{
+              position: "absolute",
+              top: "50%",
+              left: "50%",
+              width: `${imgDimensions.baseW}px`,
+              height: `${imgDimensions.baseH}px`,
+              transform: `translate(-50%, -50%) translate(${position.x}px, ${position.y}px) scale(${scale})`,
+              maxWidth: "none",
+              maxHeight: "none",
+              pointerEvents: "none",
+              userSelect: "none",
+            }}
+          />
+          <div className="pointer-events-none absolute inset-0 grid grid-cols-3 grid-rows-3 opacity-25">
+            <div className="border-r border-b border-white/40"></div>
+            <div className="border-r border-b border-white/40"></div>
+            <div className="border-b border-white/40"></div>
+            <div className="border-r border-b border-white/40"></div>
+            <div className="border-r border-b border-white/40"></div>
+            <div className="border-b border-white/40"></div>
+            <div className="border-r border-white/40"></div>
+            <div className="border-r border-white/40"></div>
+            <div></div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClear}
+          title="Eliminar foto"
+          className="absolute -right-2 -top-2 rounded-full border bg-card p-1 text-muted-foreground shadow hover:bg-destructive hover:text-white transition-colors"
+        >
+          <X size={12} />
+        </button>
+      </div>
+
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={zoomOut}
+          title="Alejar (zoom out)"
+          className="rounded border bg-muted/70 px-1.5 py-0.5 text-[10px] font-semibold text-foreground hover:bg-muted"
+        >
+          <ZoomOut size={12} />
+        </button>
+        <button
+          type="button"
+          onClick={resetPos}
+          title="Restablecer encuadre"
+          className="rounded border bg-muted/70 px-2 py-0.5 text-[10px] font-semibold text-foreground hover:bg-muted"
+        >
+          1:1
+        </button>
+        <button
+          type="button"
+          onClick={zoomIn}
+          title="Acercar (zoom in)"
+          className="rounded border bg-muted/70 px-1.5 py-0.5 text-[10px] font-semibold text-foreground hover:bg-muted"
+        >
+          <ZoomIn size={12} />
+        </button>
+      </div>
+      <div className="flex items-center gap-2">
+        <p className="text-[10px] text-muted-foreground text-center font-medium leading-tight">
+          Arrastre para mover · Rueda para zoom
+        </p>
+        <button
+          type="button"
+          onClick={onOpenPicker}
+          className="text-[10px] font-semibold text-primary hover:underline"
+        >
+          Cambiar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function compressImageBase64(dataUrl: string, maxDim = 800, quality = 0.75): Promise<string> {
+  if (typeof window === "undefined" || !dataUrl) return Promise.resolve(dataUrl);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        let w = img.width;
+        let h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      } catch {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 export function FileUpload({
   label,
   value,
@@ -169,52 +466,108 @@ export function FileUpload({
   label: string;
   value: string;
   onChange: (dataUrl: string) => void;
-  aspect?: "photo" | "wide";
+  aspect?: "photo" | "wide" | "portrait";
 }) {
   const ref = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
+  const [rawImage, setRawImage] = useState(value);
+  const lastEmittedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (value && value !== lastEmittedRef.current && value !== rawImage) {
+      setRawImage(value);
+    } else if (!value) {
+      setRawImage("");
+      lastEmittedRef.current = null;
+    }
+  }, [value]);
+
+  const handleCroppedChange = useCallback(
+    (croppedUrl: string) => {
+      lastEmittedRef.current = croppedUrl;
+      onChange(croppedUrl);
+    },
+    [onChange]
+  );
 
   const read = (file?: File) => {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => onChange(String(reader.result));
+    reader.onload = async () => {
+      const res = String(reader.result);
+      lastEmittedRef.current = null;
+      const compressed = await compressImageBase64(res, 800, 0.75);
+      setRawImage(compressed);
+      if (aspect !== "photo") {
+        onChange(compressed);
+      }
+    };
     reader.readAsDataURL(file);
+  };
+
+  const handleClear = () => {
+    setRawImage("");
+    lastEmittedRef.current = null;
+    onChange("");
   };
 
   return (
     <div>
       <Label>{label}</Label>
       <div className="flex items-start gap-3">
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDrag(true);
-          }}
-          onDragLeave={() => setDrag(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDrag(false);
-            read(e.dataTransfer.files[0]);
-          }}
-          onClick={() => ref.current?.click()}
-          className={cn(
-            "flex flex-1 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed py-6 text-center text-[11px] text-muted-foreground transition-colors hover:border-primary hover:text-primary",
-            drag && "border-primary bg-primary/5 text-primary",
-          )}
-        >
-          <Upload size={16} />
-          Arrastre la imagen o haga clic
-        </div>
-        {value && (
+        {!rawImage ? (
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDrag(true);
+            }}
+            onDragLeave={() => setDrag(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDrag(false);
+              read(e.dataTransfer.files[0]);
+            }}
+            onClick={() => ref.current?.click()}
+            className={cn(
+              "flex flex-1 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed py-6 text-center text-[11px] text-muted-foreground transition-colors hover:border-primary hover:text-primary",
+              drag && "border-primary bg-primary/5 text-primary"
+            )}
+          >
+            <Upload size={16} />
+            Arrastre la imagen o haga clic
+          </div>
+        ) : aspect === "photo" ? (
+          <InteractivePhotoCropper
+            rawImage={rawImage}
+            onChange={handleCroppedChange}
+            onClear={handleClear}
+            onOpenPicker={() => ref.current?.click()}
+          />
+        ) : aspect === "portrait" ? (
           <div className="relative">
             <img
-              src={value}
-              alt="Vista previa"
-              className={cn("rounded-md border object-cover", aspect === "photo" ? "h-[100px] w-20" : "h-[60px] w-[120px]")}
+              src={rawImage}
+              alt="Comprobante váucher"
+              className="h-[128px] w-[72px] rounded-md border object-cover shadow-sm"
             />
             <button
               type="button"
-              onClick={() => onChange("")}
+              onClick={handleClear}
+              className="absolute -right-2 -top-2 rounded-full border bg-card p-0.5 text-muted-foreground hover:bg-destructive hover:text-white transition-colors"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        ) : (
+          <div className="relative">
+            <img
+              src={rawImage}
+              alt="Vista previa"
+              className="h-[60px] w-[120px] rounded-md border object-cover"
+            />
+            <button
+              type="button"
+              onClick={handleClear}
               className="absolute -right-2 -top-2 rounded-full border bg-card p-0.5 text-muted-foreground hover:text-destructive"
             >
               <X size={12} />
@@ -223,6 +576,82 @@ export function FileUpload({
         )}
       </div>
       <input ref={ref} type="file" accept="image/*" hidden onChange={(e) => read(e.target.files?.[0])} />
+    </div>
+  );
+}
+
+export function ComboboxSelectField({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder = "Escribir o seleccionar…",
+  required,
+  error,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  placeholder?: string;
+  required?: boolean;
+  error?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <Label required={required}>{label}</Label>
+      <div className="relative flex items-center">
+        <input
+          type="text"
+          className={cn(fieldBase, "pr-8", error && "border-destructive")}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={() => setOpen((prev) => !prev)}
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+        >
+          <ChevronDown size={14} className={cn("transition-transform", open && "rotate-180")} />
+        </button>
+      </div>
+
+      {open && (
+        <div className="absolute left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto rounded-md border bg-popover py-1 shadow-md text-xs">
+          {options.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              className={cn(
+                "w-full text-left px-3 py-1.5 hover:bg-accent hover:text-accent-foreground font-medium transition-colors",
+                opt === value && "bg-primary/10 text-primary font-semibold"
+              )}
+              onClick={() => {
+                onChange(opt);
+                setOpen(false);
+              }}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
+      {error && <span className="mt-1 block text-[11px] text-destructive">{error}</span>}
     </div>
   );
 }
