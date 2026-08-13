@@ -100,7 +100,7 @@ const CATEGORIES: CommandCategory[] = [
     icon: Building2,
     description: "Datos institucionales de la Escuela de Conducción y Resolución oficial de la ANT.",
     commands: [
-      { tag: "{logoEscuela}", description: "Incrusta el logo oficial cargado desde la pantalla de Configuración en la posición donde se ubique esta etiqueta (Word / Excel)", example: "{logoEscuela}", format: "Ambos" },
+      { tag: "{%logoEscuela}", description: "Incrusta el logo de la escuela. En Word (.docx) usa % con _ (ej: {%logoEscuela_300x95}, {%logoEscuela_400x120}, {%logoEscuela_150x50} o {%logoEscuela}). En Excel (.xlsx) usa {logoEscuela:300x95}.", example: "{%logoEscuela_300x95}", format: "Ambos" },
       { tag: "{resolucionAnt}", description: "Número de Resolución de aprobación de la ANT", example: "18 DCTS-ANT-2013", format: "Ambos" },
       { tag: "{escuelaNombre}", description: "Nombre de la Escuela de Conducción", example: "Zentriumph-DriveOfice", format: "Ambos" },
       { tag: "{escuelaRuc}", description: "Número de RUC de la institución", example: "1791234567001", format: "Ambos" },

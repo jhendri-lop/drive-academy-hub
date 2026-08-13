@@ -233,19 +233,20 @@ export class ExcelGenerator {
     return `del ${startDay} de ${startMonth} al ${endDay} de ${endMonth} del ${endYear}`;
   }
 
-  private addLogoAndWatermark(sheet: ExcelJS.Worksheet, workbook: ExcelJS.Workbook, docKey: string): void {
-    const config = useApp.getState().config;
-    const logoUrl = config.escuela?.logoUrl;
-    const showLogo = Boolean(config.logoDocs?.[docKey]);
-    const showWatermark = Boolean(config.watermarkDocs?.[docKey]);
+  private processLogoTagInExcel(workbook: ExcelJS.Workbook, logoUrl?: string): void {
+    const storeConfig = useApp.getState().config;
+    const activeLogo = logoUrl || storeConfig?.escuela?.logoUrl;
+    console.log("[ExcelGenerator] processLogoTagInExcel INICIADO");
+    console.log("[ExcelGenerator] Logo URL disponible:", activeLogo ? "SÍ" : "NO");
+    console.log("[ExcelGenerator] Total de hojas:", workbook.worksheets.length);
 
-    if (!logoUrl) return;
+    if (!activeLogo || typeof activeLogo !== "string" || !activeLogo.trim()) return;
 
-    let base64Data = logoUrl;
+    let base64Data = activeLogo;
     let extension: "png" | "jpeg" = "png";
 
-    if (logoUrl.startsWith("data:")) {
-      const parts = logoUrl.split(",");
+    if (activeLogo.startsWith("data:")) {
+      const parts = activeLogo.split(",");
       if (parts.length === 2 && parts[0] && parts[1]) {
         if (parts[0].includes("image/jpeg") || parts[0].includes("image/jpg")) {
           extension = "jpeg";
@@ -255,69 +256,40 @@ export class ExcelGenerator {
     }
 
     try {
-      const imageId = workbook.addImage({
-        base64: base64Data,
-        extension,
-      });
+      let imageId: number | null = null;
 
-      if (showLogo) {
-        sheet.addImage(imageId, {
-          tl: { col: 0, row: 0 },
-          ext: { width: 130, height: 48 },
-          editAs: "oneCell",
-        });
-      }
+      workbook.eachSheet((sheet) => {
+        console.log("[ExcelGenerator] Revisando hoja:", sheet.name);
+        sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+          row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+            if (typeof cell.value === "string" && /\{?logoEscuela/i.test(cell.value)) {
+              console.log("[ExcelGenerator] ¡TAG ENCONTRADO en", cell.address, "con valor:", cell.value, "!");
+              const textVal = cell.value;
+              const matchDim = textVal.match(/logoEscuela(?::(\d+)x(\d+))?/i);
+              const customW = matchDim && matchDim[1] ? parseInt(matchDim[1], 10) : 140;
+              const customH = matchDim && matchDim[2] ? parseInt(matchDim[2], 10) : 48;
 
-      if (showWatermark) {
-        sheet.addImage(imageId, {
-          tl: { col: 4, row: 8 },
-          ext: { width: 320, height: 130 },
-          editAs: "absolute",
-        });
-      }
-    } catch (err) {
-      console.error("[ExcelGenerator] Error al incrustar logo/marca de agua:", err);
-    }
-  }
+              cell.value = textVal.replace(/\{?logoEscuela(?::\d+x\d+)?\}?/gi, "").trim();
 
-  private replaceLogoTagInSheet(sheet: ExcelJS.Worksheet, workbook: ExcelJS.Workbook): void {
-    const config = useApp.getState().config;
-    const logoUrl = config.escuela?.logoUrl;
-    if (!logoUrl) return;
+              if (imageId === null) {
+                imageId = workbook.addImage({
+                  base64: base64Data,
+                  extension,
+                });
+              }
 
-    let base64Data = logoUrl;
-    let extension: "png" | "jpeg" = "png";
-
-    if (logoUrl.startsWith("data:")) {
-      const parts = logoUrl.split(",");
-      if (parts.length === 2 && parts[0] && parts[1]) {
-        if (parts[0].includes("image/jpeg") || parts[0].includes("image/jpg")) {
-          extension = "jpeg";
-        }
-        base64Data = parts[1];
-      }
-    }
-
-    try {
-      const imageId = workbook.addImage({
-        base64: base64Data,
-        extension,
-      });
-
-      sheet.eachRow({ includeEmpty: false }, (row, rIdx) => {
-        row.eachCell({ includeEmpty: false }, (cell, cIdx) => {
-          if (typeof cell.value === "string" && cell.value.includes("{logoEscuela}")) {
-            cell.value = cell.value.replace("{logoEscuela}", "").trim();
-            sheet.addImage(imageId, {
-              tl: { col: cIdx - 1, row: rIdx - 1 },
-              ext: { width: 140, height: 50 },
-              editAs: "oneCell",
-            });
-          }
+              sheet.addImage(imageId, {
+                tl: { col: colNumber - 1, row: rowNumber - 1 },
+                ext: { width: customW, height: customH },
+                editAs: "oneCell",
+              });
+              console.log(`[ExcelGenerator] Logo insertado vía etiqueta {logoEscuela} en ${sheet.name}!${cell.address} (${customW}x${customH})`);
+            }
+          });
         });
       });
     } catch (err) {
-      console.warn("[ExcelGenerator] Error al reemplazar la etiqueta {logoEscuela}:", err);
+      console.warn("[ExcelGenerator] Error al procesar etiqueta {logoEscuela} en Excel:", err);
     }
   }
 
@@ -339,7 +311,7 @@ export class ExcelGenerator {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Base General");
 
-    this.addLogoAndWatermark(sheet, workbook, "base_general");
+    this.processLogoTagInExcel(workbook);
 
     const school = data.schoolName || "ESCUELA DE CONDUCCION DRIVE ACADEMY ALERTA CONDADO";
     const course = data.courseName || "TIPO B DAIC 019 2026";
@@ -486,10 +458,9 @@ export class ExcelGenerator {
     const escuelaNombre = storeConfig.escuela?.nombre || "DRIVE ACADEMY S.A.";
     const escuelaSucursal = storeConfig.escuela?.sucursal || "CONDADO";
     const schoolFull = `${escuelaNombre.toUpperCase()} SUCURSAL - ${escuelaSucursal.toUpperCase()}`;
-
-    const workbook = await this.loadExcelTemplate("Fase 1/PERMISOS DAIC 019-26 ANEXO.xlsx");
+    const workbook = await this.loadExcelTemplate("Fase 1/AnexoPermisos.xlsx");
     if (!workbook) {
-      throw new Error("No se pudo cargar la plantilla PERMISOS DAIC 019-26 ANEXO.xlsx");
+      throw new Error("No se pudo cargar la plantilla AnexoPermisos.xlsx");
     }
 
     // 1. Eliminar hojas secundarias de borrador/ejemplo que traía la plantilla (Hoja2, Hoja3)
@@ -504,7 +475,7 @@ export class ExcelGenerator {
 
     const sheet = workbook.worksheets[0];
     if (!sheet) {
-      throw new Error("No se encontró ninguna hoja en la plantilla PERMISOS DAIC 019-26 ANEXO.xlsx");
+      throw new Error("No se encontró ninguna hoja en la plantilla AnexoPermisos.xlsx");
     }
     sheet.name = "Anexo Permisos";
 
@@ -520,7 +491,7 @@ export class ExcelGenerator {
     const secretariaCargo = (data as any).secretariaCargo || storeConfig?.firmas?.secretaria?.cargo || "SECRETARIA ACADEMICA";
 
     // 1. Escanear y reemplazar todas las etiquetas {etiqueta} respetando la plantilla original
-    this.replaceLogoTagInSheet(sheet, workbook);
+    this.processLogoTagInExcel(workbook);
 
     sheet.eachRow({ includeEmpty: false }, (row) => {
       row.eachCell({ includeEmpty: false }, (cell) => {
@@ -637,7 +608,7 @@ export class ExcelGenerator {
     const cursoNombre = data.courseName || "DAIC 020 2026";
     const periodoText = data.periodo || this.formatPeriodo(data.startDate, data.endDate);
 
-    let workbook = await this.loadExcelTemplate("Fase 4/ENTREGA DE DOCUMENTOS FORMATO.xlsx");
+    let workbook = await this.loadExcelTemplate("Fase 4/EntregaDeDocumentos.xlsx");
 
     if (!workbook) {
       workbook = new ExcelJS.Workbook();
@@ -653,7 +624,7 @@ export class ExcelGenerator {
       throw new Error("No se encontró la hoja de trabajo en la plantilla de Entrega de Documentos.");
     }
 
-    this.replaceLogoTagInSheet(sheet, workbook);
+    this.processLogoTagInExcel(workbook);
 
     // 1. Reemplazar marcadores globales en el encabezado
     sheet.eachRow({ includeEmpty: false }, (row, rIdx) => {
@@ -802,7 +773,7 @@ export class ExcelGenerator {
     const escuelaNombre = storeConfig.escuela?.nombre || "DRIVE ACADEMY S.A.";
     const escuelaFull = data.schoolBranch || `${escuelaNombre.toUpperCase()} SUCURSAL - ${escuelaSucursal.toUpperCase()}`;
 
-    let workbook = await this.loadExcelTemplate("Fase 1/DAIC-019-2026 exel permisos ANT.xlsx");
+    let workbook = await this.loadExcelTemplate("Fase 1/ExelPermisosANT.xlsx");
 
     if (!workbook) {
       workbook = new ExcelJS.Workbook();
@@ -818,7 +789,7 @@ export class ExcelGenerator {
     }
 
     // 1. Escanear y reemplazar etiquetas {etiqueta} globales en la plantilla
-    this.replaceLogoTagInSheet(sheet, workbook);
+    this.processLogoTagInExcel(workbook);
     sheet.eachRow({ includeEmpty: false }, (row) => {
       row.eachCell({ includeEmpty: false }, (cell) => {
         if (typeof cell.value === "string" && cell.value.includes("{")) {
@@ -958,7 +929,7 @@ export class ExcelGenerator {
     let sourceStudents = Array.isArray(data.students) && data.students.length > 0 ? data.students : storeEstudiantes;
     if (sourceStudents.length === 0) sourceStudents = [{}];
 
-    let workbook = await this.loadExcelTemplate("Fase 3/DAIC 019 2026 anexo legalizacion ANT.xlsx");
+    let workbook = await this.loadExcelTemplate("Fase 3/AnexoLegalizacionANT.xlsx");
     if (!workbook) {
       workbook = new ExcelJS.Workbook();
       const sheet = workbook.addWorksheet("Anexo Legalización");
@@ -981,7 +952,7 @@ export class ExcelGenerator {
     sheet.name = "Anexo Legalización";
 
     // Reemplazar etiquetas de encabezado
-    this.replaceLogoTagInSheet(sheet, workbook);
+    this.processLogoTagInExcel(workbook);
     sheet.eachRow({ includeEmpty: false }, (row) => {
       row.eachCell({ includeEmpty: false }, (cell) => {
         if (cell.master && cell.address !== cell.master.address) return;
@@ -1095,7 +1066,7 @@ export class ExcelGenerator {
     let sourceStudents = Array.isArray(data.students) && data.students.length > 0 ? data.students : storeEstudiantes;
     if (sourceStudents.length === 0) sourceStudents = [{}];
 
-    let workbook = await this.loadExcelTemplate("Fase 3/ANT BASE DE DATOS DAIC 019 2026 legalizacion ant.xlsx");
+    let workbook = await this.loadExcelTemplate("Fase 3/NominaLegalizacion.xlsx");
     if (!workbook) {
       return this.generateAnexoLegalizacion(data, outputPath);
     }
@@ -1147,7 +1118,7 @@ export class ExcelGenerator {
       row.height = 20;
     });
 
-    this.replaceLogoTagInSheet(sheet, workbook);
+    this.processLogoTagInExcel(workbook);
     sheet.eachRow({ includeEmpty: false }, (row) => {
       row.eachCell({ includeEmpty: false }, (cell) => {
         if (cell.master && cell.address !== cell.master.address) return;
@@ -1352,35 +1323,11 @@ export class ExcelGenerator {
       const sheetName = veh.nombre || `AUTO ${veh.numero}`;
       const sheet = workbook.addWorksheet(sheetName);
 
-      // Logo dinámico
-      const showLogo = Boolean(storeConfig.logoDocs?.ficha_practica);
-      const logoUrl = storeConfig.escuela?.logoUrl;
-      if (showLogo && logoUrl) {
-        let base64Data = logoUrl;
-        let extension: "png" | "jpeg" = "png";
-        if (logoUrl.startsWith("data:")) {
-          const parts = logoUrl.split(",");
-          if (parts.length === 2 && parts[0] && parts[1]) {
-            if (parts[0].includes("image/jpeg") || parts[0].includes("image/jpg")) {
-              extension = "jpeg";
-            }
-            base64Data = parts[1];
-          }
-        }
-        try {
-          const imageId = workbook.addImage({
-            base64: base64Data,
-            extension,
-          });
-          sheet.addImage(imageId, {
-            tl: { col: 0, row: 2 },
-            ext: { width: 140, height: 48 },
-            editAs: "oneCell",
-          });
-        } catch (e) {
-          console.error("[ExcelGenerator] Logo error:", e);
-        }
-      }
+      // Disposición de página: Orientación Horizontal (Landscape) específica para Ficha Práctica
+      sheet.pageSetup.orientation = "landscape";
+
+      // Escribir tag del logo en celda B2 para que processLogoTagInExcel lo procese
+      sheet.getCell("B2").value = "{logoEscuela:170x65}";
 
       // Encabezado Título Central (Cols C3:W3 y C4:W4)
       sheet.mergeCells("C3:W3");
@@ -1668,6 +1615,8 @@ export class ExcelGenerator {
       });
     }
 
+    this.processLogoTagInExcel(workbook);
+
     const buffer = await workbook.xlsx.writeBuffer();
     await LocalFileStorage.getInstance().saveFile(outputPath, new Uint8Array(buffer));
     return outputPath;
@@ -1719,7 +1668,7 @@ export class ExcelGenerator {
     const sheet = workbook.getWorksheet("TITULO") || workbook.worksheets[0];
 
     if (sheet) {
-      this.addLogoAndWatermark(sheet, workbook, "titulo");
+      this.processLogoTagInExcel(workbook);
 
       const firstSt = listado[0] || {};
       const nombreEstudiante = (firstSt.fullName || firstSt.nombres || firstSt.nombre || "ESTUDIANTE EJEMPLO").toUpperCase();
@@ -1763,6 +1712,8 @@ export class ExcelGenerator {
         });
       });
     }
+
+    this.processLogoTagInExcel(workbook);
 
     const buffer = await workbook.xlsx.writeBuffer();
     await LocalFileStorage.getInstance().saveFile(outputPath, new Uint8Array(buffer));
@@ -1934,7 +1885,6 @@ export class ExcelGenerator {
           // Día 7: Entrada 08:00 ±10 min, Salida 12:00 ±10 min
           const entryOffset = getRandomInt(-10, 10);
           const entryMin = 8 * 60 + entryOffset;
-
           const exitOffset = getRandomInt(-10, 10);
           const exitMin = 12 * 60 + exitOffset;
 
@@ -1969,6 +1919,162 @@ export class ExcelGenerator {
     const buffer = await workbook.xlsx.writeBuffer();
     await LocalFileStorage.getInstance().saveFile(outputPath, new Uint8Array(buffer));
     console.log("[ExcelGenerator] Reporte de Asistencia Práctica generado con éxito:", outputPath);
+    return outputPath;
+  }
+
+  public async generateCierreCajaExcel(
+    data: {
+      tituloReporte: string;
+      subtitulo: string;
+      fecha: string;
+      schoolName?: string;
+      schoolRuc?: string;
+      totalDia: number;
+      porMetodo: Record<string, number>;
+      porConcepto: Record<string, number>;
+      recibos: Array<{
+        numero?: number | string;
+        estudiante: string;
+        concepto: string;
+        monto: number;
+        metodo: string;
+        curso?: string;
+        fecha?: string;
+      }>;
+    },
+    outputPath: string
+  ): Promise<string> {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Reporte de Caja");
+
+    const storeConfig = useApp.getState().config;
+    const schoolName = data.schoolName || storeConfig.escuela?.nombre || "DRIVE ACADEMY";
+    const ruc = data.schoolRuc || storeConfig.escuela?.ruc || "1791234567001";
+
+    sheet.mergeCells("A1:F1");
+    const cellA1 = sheet.getCell("A1");
+    cellA1.value = schoolName.toUpperCase();
+    cellA1.font = { bold: true, size: 14, color: { argb: "1E293B" } };
+    cellA1.alignment = { horizontal: "center", vertical: "middle" };
+
+    sheet.mergeCells("A2:F2");
+    const cellA2 = sheet.getCell("A2");
+    cellA2.value = `RUC: ${ruc}  |  ${data.tituloReporte.toUpperCase()}  |  FECHA: ${data.fecha}`;
+    cellA2.font = { size: 10, bold: true, color: { argb: "475569" } };
+    cellA2.alignment = { horizontal: "center", vertical: "middle" };
+
+    sheet.getCell("A4").value = "TOTAL RECAUDADO:";
+    sheet.getCell("A4").font = { bold: true, size: 10 };
+    sheet.getCell("B4").value = data.totalDia;
+    sheet.getCell("B4").font = { bold: true, size: 11, color: { argb: "059669" } };
+    sheet.getCell("B4").numFmt = "$#,##0.00";
+
+    sheet.getCell("D4").value = "TOTAL RECIBOS:";
+    sheet.getCell("D4").font = { bold: true, size: 10 };
+    sheet.getCell("E4").value = data.recibos.length;
+    sheet.getCell("E4").font = { bold: true, size: 11 };
+
+    sheet.getCell("A5").value = "EFECTIVO:";
+    sheet.getCell("A5").font = { bold: true, size: 9 };
+    sheet.getCell("B5").value = data.porMetodo["Efectivo"] || 0;
+    sheet.getCell("B5").numFmt = "$#,##0.00";
+
+    sheet.getCell("C5").value = "TRANSFERENCIAS:";
+    sheet.getCell("C5").font = { bold: true, size: 9 };
+    sheet.getCell("D5").value = data.porMetodo["Transferencia"] || 0;
+    sheet.getCell("D5").numFmt = "$#,##0.00";
+
+    sheet.getCell("E5").value = "TARJETAS:";
+    sheet.getCell("E5").font = { bold: true, size: 9 };
+    sheet.getCell("F5").value = data.porMetodo["Tarjeta"] || 0;
+    sheet.getCell("F5").numFmt = "$#,##0.00";
+
+    const headers = ["N° Recibo", "Estudiante", "Concepto", "Curso", "Forma de Pago", "Monto"];
+    const row7 = sheet.getRow(7);
+    row7.values = headers;
+    row7.font = { bold: true, size: 10, color: { argb: "FFFFFF" } };
+    row7.height = 24;
+
+    for (let c = 1; c <= 6; c++) {
+      const cell = row7.getCell(c);
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "1E293B" },
+      };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = {
+        top: { style: "thin" },
+        bottom: { style: "thin" },
+        left: { style: "thin" },
+        right: { style: "thin" },
+      };
+    }
+
+    sheet.getColumn(1).width = 14;
+    sheet.getColumn(2).width = 35;
+    sheet.getColumn(3).width = 30;
+    sheet.getColumn(4).width = 20;
+    sheet.getColumn(5).width = 18;
+    sheet.getColumn(6).width = 16;
+
+    data.recibos.forEach((r, idx) => {
+      const rIdx = 8 + idx;
+      const row = sheet.getRow(rIdx);
+      const montoVal = Number(r.monto || 0);
+
+      row.values = [
+        String(r.numero || (idx + 1)).padStart(5, "0"),
+        (r.estudiante || "").toUpperCase(),
+        r.concepto || "",
+        r.curso || "—",
+        (r.metodo || "EFECTIVO").toUpperCase(),
+        montoVal,
+      ];
+
+      row.font = { size: 9 };
+      row.alignment = { vertical: "middle" };
+
+      if (idx % 2 === 1) {
+        row.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "F8FAFC" },
+        };
+      }
+
+      for (let c = 1; c <= 6; c++) {
+        const cell = row.getCell(c);
+        cell.border = {
+          top: { style: "thin", color: { argb: "E2E8F0" } },
+          bottom: { style: "thin", color: { argb: "E2E8F0" } },
+          left: { style: "thin", color: { argb: "E2E8F0" } },
+          right: { style: "thin", color: { argb: "E2E8F0" } },
+        };
+        if (c === 1 || c === 5) cell.alignment = { horizontal: "center", vertical: "middle" };
+        if (c === 6) {
+          cell.alignment = { horizontal: "right", vertical: "middle" };
+          cell.numFmt = "$#,##0.00";
+        }
+      }
+    });
+
+    const lastRowIdx = 8 + data.recibos.length;
+    const totalRow = sheet.getRow(lastRowIdx);
+    totalRow.getCell(5).value = "TOTAL RECAUDADO:";
+    totalRow.getCell(5).font = { bold: true, size: 10 };
+    totalRow.getCell(5).alignment = { horizontal: "right", vertical: "middle" };
+
+    totalRow.getCell(6).value = { formula: `SUM(F8:F${lastRowIdx - 1})` };
+    totalRow.getCell(6).font = { bold: true, size: 11, color: { argb: "059669" } };
+    totalRow.getCell(6).numFmt = "$#,##0.00";
+    totalRow.getCell(6).alignment = { horizontal: "right", vertical: "middle" };
+
+    this.processLogoTagInExcel(workbook);
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    await LocalFileStorage.getInstance().saveFile(outputPath, new Uint8Array(buffer));
+    console.log("[ExcelGenerator] Reporte de Cierre de Caja Excel generado con éxito:", outputPath);
     return outputPath;
   }
 }

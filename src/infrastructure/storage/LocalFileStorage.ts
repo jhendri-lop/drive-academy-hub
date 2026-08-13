@@ -35,39 +35,44 @@ export class LocalFileStorage {
   }
 
   public async saveFile(filePath: string, bytes: Uint8Array | ArrayBuffer): Promise<void> {
-    // 1. Guardar en disco físico vía Tauri (si se ejecuta como App de escritorio)
+    let tauriSuccess = false;
+
+    // 1. Intentar guardar en disco vía Tauri (app de escritorio)
     try {
       const contents = Array.from(new Uint8Array(bytes));
       await invoke("save_binary_file", { path: filePath, contents });
       console.log(`[LocalFileStorage] Archivo guardado exitosamente vía Tauri: ${filePath}`);
+      tauriSuccess = true; // ✅ Marcar que Tauri funcionó
     } catch (e) {
-      console.warn(`[LocalFileStorage] Tauri IPC no disponible. Guardado omitido en disco Tauri: ${filePath}`, e);
+      console.warn(`[LocalFileStorage] Tauri IPC no disponible.`, e);
     }
 
-    // 2. Disparar SIEMPRE la descarga directa del archivo en el navegador
-    try {
-      const u8 = new Uint8Array(bytes);
-      const fileName = filePath.split("/").pop() || "documento.docx";
-      const isExcel = fileName.endsWith(".xlsx");
-      const isPdf = fileName.endsWith(".pdf");
-      const mimeType = isExcel
-        ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        : isPdf
-        ? "application/pdf"
-        : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    // 2. Descarga del navegador SOLO si Tauri NO funcionó (modo web)
+    if (!tauriSuccess) {
+      try {
+        const u8 = new Uint8Array(bytes);
+        const fileName = filePath.split("/").pop() || "documento.docx";
+        const isExcel = fileName.endsWith(".xlsx");
+        const isPdf = fileName.endsWith(".pdf");
+        const mimeType = isExcel
+          ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          : isPdf
+          ? "application/pdf"
+          : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-      const blob = new Blob([u8], { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      console.log(`[LocalFileStorage] Descarga iniciada exitosamente en el navegador para: ${fileName}`);
-    } catch (errDl) {
-      console.error("[LocalFileStorage] Error al forzar descarga en navegador:", errDl);
+        const blob = new Blob([u8], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        console.log(`[LocalFileStorage] Descarga iniciada en navegador (modo web): ${fileName}`);
+      } catch (errDl) {
+        console.error("[LocalFileStorage] Error al descargar en navegador:", errDl);
+      }
     }
   }
 
@@ -101,7 +106,31 @@ export class LocalFileStorage {
 
   public async getCourseFolderPath(courseName: string, customRoot?: string): Promise<string> {
     const safeName = courseName.replace(/[^a-zA-Z0-9_-]/g, "_");
-    const activeRoot = customRoot || (typeof window !== "undefined" ? (window as any).__LAST_CUSTOM_DOCS_ROOT__ : undefined);
+
+    // Prioridad 1: customRoot explícito pasado como argumento
+    // Prioridad 2: Buscar en el store de Zustand el customDocsRoot del curso por nombre
+    // Prioridad 3: Variable global de la última carpeta seleccionada
+    // Prioridad 4: Carpeta de documentos del sistema
+    let activeRoot = customRoot;
+
+    if (!activeRoot) {
+      try {
+        const { useApp } = await import("@/lib/store");
+        const cursos = useApp.getState().cursos || [];
+        const cursoMatch = cursos.find(
+          (c) => c.nombre === courseName || c.nombre.replace(/[^a-zA-Z0-9_-]/g, "_") === safeName
+        );
+        if (cursoMatch?.customDocsRoot && cursoMatch.customDocsRoot.trim()) {
+          activeRoot = cursoMatch.customDocsRoot.trim();
+        }
+      } catch {
+        // ignore — store not yet available in some edge cases
+      }
+    }
+
+    if (!activeRoot && typeof window !== "undefined") {
+      activeRoot = (window as any).__LAST_CUSTOM_DOCS_ROOT__;
+    }
 
     if (activeRoot && activeRoot.trim()) {
       const cleanRoot = activeRoot.trim().replace(/[/\\]+$/, "");

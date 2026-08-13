@@ -500,4 +500,279 @@ export class PDFGenerator {
     await LocalFileStorage.getInstance().saveFile(outputPath, pdfBytes);
     return outputPath;
   }
+
+  public async generateCierreCajaCompletoPDF(
+    data: {
+      tituloReporte: string;
+      subtitulo: string;
+      fecha: string;
+      schoolName?: string;
+      schoolRuc?: string;
+      totalDia: number;
+      porMetodo: Record<string, number>;
+      porConcepto: Record<string, number>;
+      recibos: Array<{
+        numero?: number | string;
+        estudiante: string;
+        concepto: string;
+        monto: number;
+        metodo: string;
+        curso?: string;
+        fecha?: string;
+      }>;
+    },
+    outputPath: string
+  ): Promise<string> {
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const storeConfig = useApp.getState().config;
+    const schoolName = data.schoolName || storeConfig.escuela?.nombre || "DRIVE ACADEMY";
+    const ruc = data.schoolRuc || storeConfig.escuela?.ruc || "1791234567001";
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(20, 20, 20);
+    doc.text(schoolName.toUpperCase(), 14, 15);
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(80, 80, 80);
+    doc.text(`RUC: ${ruc} | Fecha: ${data.fecha}`, 14, 20);
+
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(15, 80, 150);
+    doc.text(data.tituloReporte.toUpperCase(), 14, 28);
+
+    doc.setFontSize(9.5);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(60, 60, 60);
+    doc.text(data.subtitulo, 14, 33);
+
+    doc.setLineWidth(0.5);
+    doc.setDrawColor(200, 200, 200);
+    doc.line(14, 36, 196, 36);
+
+    doc.setFillColor(245, 247, 250);
+    doc.roundedRect(14, 39, 182, 22, 2, 2, "FD");
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(30, 30, 30);
+    doc.text(`TOTAL RECAUDADO: $${data.totalDia.toFixed(2)}`, 18, 46);
+    doc.text(`CANTIDAD RECIBOS: ${data.recibos.length}`, 120, 46);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    const efec = data.porMetodo["Efectivo"] || 0;
+    const trans = data.porMetodo["Transferencia"] || 0;
+    const tarj = data.porMetodo["Tarjeta"] || 0;
+    doc.text(`Efectivo: $${efec.toFixed(2)}   |   Transferencias: $${trans.toFixed(2)}   |   Tarjetas: $${tarj.toFixed(2)}`, 18, 54);
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(20, 20, 20);
+    doc.text("Detalle de Transacciones", 14, 68);
+
+    let startY = 72;
+    doc.setFillColor(30, 41, 59);
+    doc.rect(14, startY, 182, 7, "F");
+
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(255, 255, 255);
+    doc.text("N° Recibo", 18, startY + 5);
+    doc.text("Estudiante", 45, startY + 5);
+    doc.text("Concepto / Curso", 105, startY + 5);
+    doc.text("Método", 155, startY + 5);
+    doc.text("Monto", 192, startY + 5, { align: "right" });
+
+    startY += 7;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(30, 30, 30);
+
+    data.recibos.forEach((r, idx) => {
+      if (startY > 270) {
+        doc.addPage();
+        startY = 20;
+        doc.setFillColor(30, 41, 59);
+        doc.rect(14, startY, 182, 7, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(255, 255, 255);
+        doc.text("N° Recibo", 18, startY + 5);
+        doc.text("Estudiante", 45, startY + 5);
+        doc.text("Concepto / Curso", 105, startY + 5);
+        doc.text("Método", 155, startY + 5);
+        doc.text("Monto", 192, startY + 5, { align: "right" });
+        startY += 7;
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(30, 30, 30);
+      }
+
+      if (idx % 2 === 1) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(14, startY, 182, 6, "F");
+      }
+
+      const numStr = String(r.numero || (idx + 1)).padStart(5, "0");
+      doc.text(numStr, 18, startY + 4.5);
+      doc.text((r.estudiante || "—").slice(0, 32), 45, startY + 4.5);
+      doc.text(`${r.concepto || ""} ${r.curso && r.curso !== "—" ? `(${r.curso})` : ""}`.slice(0, 30), 105, startY + 4.5);
+      doc.text(r.metodo || "Efectivo", 155, startY + 4.5);
+      doc.text(`$${Number(r.monto || 0).toFixed(2)}`, 192, startY + 4.5, { align: "right" });
+
+      doc.setDrawColor(230, 230, 230);
+      doc.setLineWidth(0.2);
+      doc.line(14, startY + 6, 196, startY + 6);
+
+      startY += 6;
+    });
+
+    const footerY = Math.max(startY + 20, 250);
+    if (footerY <= 270) {
+      doc.setLineWidth(0.4);
+      doc.setDrawColor(80, 80, 80);
+      doc.line(70, footerY, 140, footerY);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.setTextColor(50, 50, 50);
+      doc.text("RESPONSABLE DE CAJA / TESORERÍA", 105, footerY + 5, { align: "center" });
+    }
+
+    const pdfBuffer = doc.output("arraybuffer");
+    await LocalFileStorage.getInstance().saveFile(outputPath, new Uint8Array(pdfBuffer));
+    return outputPath;
+  }
+
+  public async generateComprobantesRecibosPDF(
+    recibos: Array<{
+      numero?: number | string;
+      estudiante: string;
+      monto: number;
+      metodo: string;
+      fecha?: string;
+      comprobante?: string;
+      comprobanteImg?: string;
+      curso?: string;
+    }>,
+    titulo: string,
+    outputPath: string
+  ): Promise<string> {
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const storeConfig = useApp.getState().config;
+    const schoolName = storeConfig.escuela?.nombre || "DRIVE ACADEMY";
+
+    const conImagen = recibos.filter(
+      (r) => r.comprobanteImg && typeof r.comprobanteImg === "string" && r.comprobanteImg.trim().length > 0
+    );
+
+    if (conImagen.length === 0) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.text(schoolName.toUpperCase(), 14, 15);
+      doc.setFontSize(12);
+      doc.setTextColor(180, 50, 50);
+      doc.text(`COMPROBANTES DE RECIBOS — ${titulo.toUpperCase()}`, 14, 25);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(80, 80, 80);
+      doc.text("No se encontraron imágenes de comprobantes de pago adjuntas.", 14, 35);
+    } else {
+      // ── Grid 4 columnas × 3 filas = 12 comprobantes por página ──
+      // Página A4: 210 × 297 mm. Márgenes: 8 mm
+      const COLS = 4;
+      const ROWS = 3;
+      const PER_PAGE = COLS * ROWS;
+
+      const marginX = 8;
+      const marginY = 18;
+      const gapX = 3;
+      const gapY = 8;
+
+      const pageW = 210;
+      const pageH = 297;
+      const usableW = pageW - marginX * 2;
+      const usableH = pageH - marginY - 8;
+
+      // Dimensiones de cada celda: ~44mm ancho × ~75mm alto
+      const cellW = (usableW - gapX * (COLS - 1)) / COLS;
+      const labelH = 11; // 11 mm para albergar 3 filas holgadas
+      const cellH = (usableH - gapY * (ROWS - 1) - labelH * ROWS) / ROWS;
+
+      let pageIdx = 0;
+
+      for (let i = 0; i < conImagen.length; i++) {
+        const posInPage = i % PER_PAGE;
+
+        if (posInPage === 0) {
+          if (i > 0) doc.addPage();
+          pageIdx++;
+
+          // Encabezado de página
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(10);
+          doc.setTextColor(15, 80, 150);
+          doc.text(`${schoolName.toUpperCase()} — COMPROBANTES: ${titulo.toUpperCase()}`, marginX, 12);
+          doc.setLineWidth(0.3);
+          doc.setDrawColor(200, 200, 200);
+          doc.line(marginX, 14, pageW - marginX, 14);
+        }
+
+        const col = posInPage % COLS;
+        const row = Math.floor(posInPage / COLS);
+
+        const x = marginX + col * (cellW + gapX);
+        const y = marginY + row * (cellH + labelH + gapY);
+
+        const r = conImagen[i]!;
+
+        // Etiqueta en 3 filas sin solapamiento
+        const reciboNum = String(r.numero || (i + 1)).padStart(5, "0");
+        const montoStr = `$${Number(r.monto || 0).toFixed(2)}`;
+        const metodoStr = (r.metodo || "EFECTIVO").toUpperCase();
+        const fechaStr = r.fecha || "";
+        const estudianteStr = (r.estudiante || "").toUpperCase();
+
+        // Fila 1: N° Recibo y Monto
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7);
+        doc.setTextColor(15, 80, 150);
+        doc.text(`Rec. ${reciboNum} — ${montoStr}`, x, y + 3, { maxWidth: cellW - 1 });
+
+        // Fila 2: Nombre del Estudiante
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(6.5);
+        doc.setTextColor(30, 30, 30);
+        doc.text(estudianteStr, x, y + 6.5, { maxWidth: cellW - 1 });
+
+        // Fila 3: Método y Fecha
+        doc.setFontSize(6);
+        doc.setTextColor(100, 100, 100);
+        doc.text(`${metodoStr} · ${fechaStr}`, x, y + 9.5, { maxWidth: cellW - 1 });
+
+        // Marco de la imagen
+        doc.setDrawColor(180, 180, 180);
+        doc.setLineWidth(0.3);
+        doc.rect(x, y + labelH, cellW, cellH);
+
+        // Imagen del comprobante (sin rotación forzada)
+        let base64Img = r.comprobanteImg!;
+        const isPng = base64Img.includes("image/png");
+        const fmt = isPng ? "PNG" : "JPEG";
+
+        try {
+          doc.addImage(base64Img, fmt, x + 0.5, y + labelH + 0.5, cellW - 1, cellH - 1, undefined, "FAST");
+        } catch (err) {
+          console.warn("[PDFGenerator] Error al dibujar comprobante en PDF:", err);
+          doc.setFontSize(8);
+          doc.setTextColor(200, 50, 50);
+          doc.text("Error al cargar imagen", x + 2, y + labelH + 10);
+        }
+      }
+    }
+
+    const pdfBuffer = doc.output("arraybuffer");
+    await LocalFileStorage.getInstance().saveFile(outputPath, new Uint8Array(pdfBuffer));
+    return outputPath;
+  }
 }

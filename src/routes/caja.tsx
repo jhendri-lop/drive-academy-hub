@@ -15,9 +15,9 @@ export default function CajaPage() {
   const precioPsico = useApp((s) => s.config.precios["Psicosensometrico"] ?? 35);
   const [open, setOpen] = useState(false);
 
-  const hoy = new Date().toISOString().slice(0, 10);
-  const delDia = recibos.filter((r) => r.fecha === hoy);
-  const suma = (m: FormaPago) => delDia.filter((r) => r.metodo === m).reduce((a, r) => a + r.monto, 0);
+  const [fechaCaja, setFechaCaja] = useState(new Date().toLocaleDateString("en-CA"));
+  const delDia = recibos.filter((r) => r.fecha === fechaCaja || (!r.fecha && recibos.length > 0));
+  const suma = (m: FormaPago) => delDia.filter((r) => (r.metodo || "Efectivo").toLowerCase() === m.toLowerCase()).reduce((a, r) => a + r.monto, 0);
   const total = delDia.reduce((a, r) => a + r.monto, 0);
 
   const [f, setF] = useState({
@@ -63,7 +63,7 @@ export default function CajaPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Caja</h1>
-          <p className="text-[12px] text-muted-foreground">Movimientos del {hoy}</p>
+          <p className="text-[12px] text-muted-foreground">Movimientos del {fechaCaja}</p>
         </div>
         <div className="flex gap-2">
           <button

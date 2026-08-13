@@ -154,6 +154,7 @@ export const useApp = create<AppState>()(
                 curso: curso?.nombre ?? "—",
                 fecha: nuevo.fecha,
                 comprobante: e.comprobante,
+                comprobanteImg: e.comprobanteImg || (e as any).fotoUrl || "",
               },
             ],
           };
@@ -188,7 +189,8 @@ export const useApp = create<AppState>()(
               ...r,
               id: crypto.randomUUID(),
               numero: s.config.secuenciales.recibos + s.recibos.length,
-              fecha: new Date().toISOString().slice(0, 10),
+              fecha: new Date().toLocaleDateString("en-CA"),
+              comprobanteImg: r.comprobanteImg || "",
             },
           ],
         })),

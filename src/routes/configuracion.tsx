@@ -21,7 +21,6 @@ import type { Instructor, Vehiculo } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 import { CustomFieldsView } from "@/components/CustomFieldsView";
-import { LogoDocsConfig } from "@/components/LogoDocsConfig";
 import { TemplateCommandsView } from "@/components/TemplateCommandsView";
 import { DirectivaConfig } from "@/components/DirectivaConfig";
 import { Sliders } from "lucide-react";
@@ -36,7 +35,6 @@ type Seccion =
   | "Precios"
   | "Secuenciales"
   | "Campos Personalizados"
-  | "Logo en Documentos"
   | "Comandos y Etiquetas"
   | "Tema y Colores";
 
@@ -48,7 +46,6 @@ const CARDS: { id: Seccion; icon: typeof Building2; desc: string }[] = [
   { id: "Precios", icon: DollarSign, desc: "Valores por tipo de licencia" },
   { id: "Secuenciales", icon: Hash, desc: "Recibos, actas y oficios" },
   { id: "Campos Personalizados", icon: Sliders, desc: "Atributos adicionales editables" },
-  { id: "Logo en Documentos", icon: ImageIcon, desc: "Dónde imprimir el logo" },
   { id: "Comandos y Etiquetas", icon: Terminal, desc: "Copia rápida de marcadores Word y Excel" },
   { id: "Tema y Colores", icon: Palette, desc: "Modo y paleta del sistema" },
 ];
@@ -59,22 +56,6 @@ export default function ConfiguracionPage() {
   const [abierta, setAbierta] = useState<Seccion | null>(null);
 
   const guardar = async () => {
-    if (abierta === "Logo en Documentos") {
-      try {
-        const client = SQLiteClient.getInstance();
-        const logoDocs = config.logoDocs || {};
-        const watermarkDocs = config.watermarkDocs || {};
-        for (const key of Object.keys(logoDocs)) {
-          await client.execute(
-            `INSERT INTO logo_documents (document_name, show_logo, show_watermark) VALUES (?, ?, ?)
-             ON CONFLICT(document_name) DO UPDATE SET show_logo = excluded.show_logo, show_watermark = excluded.show_watermark;`,
-            [key, logoDocs[key] ? 1 : 0, watermarkDocs[key] ? 1 : 0]
-          );
-        }
-      } catch (err) {
-        console.error("Error guardando logoDocs a SQLite:", err);
-      }
-    }
     toast.success("Configuración guardada");
     setAbierta(null);
   };
@@ -269,10 +250,6 @@ export default function ConfiguracionPage() {
 
         {abierta === "Campos Personalizados" && (
           <CustomFieldsView />
-        )}
-
-        {abierta === "Logo en Documentos" && (
-          <LogoDocsConfig />
         )}
 
         {abierta === "Comandos y Etiquetas" && (

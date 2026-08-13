@@ -87,6 +87,7 @@ export interface Recibo {
   curso: string;
   fecha: string;
   comprobante?: string;
+  comprobanteImg?: string;
 }
 
 export interface Config {

@@ -21,17 +21,77 @@ import { useApp } from "@/lib/store";
 import { ANT_LOGO_BASE64 } from "./antLogoBase64";
 import Docxtemplater from "docxtemplater";
 import PizZip from "pizzip";
+// @ts-ignore
+import ImageModule from "docxtemplater-image-module-free";
+
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const cleanB64 = base64.replace(/^data:image\/[a-z]+;base64,/i, "").trim();
+  const binaryString = window.atob(cleanB64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
 
 export class WordGenerator {
   private static instance: WordGenerator | null = null;
 
-  private constructor() {}
+  private constructor() { }
 
   public static getInstance(): WordGenerator {
     if (!WordGenerator.instance) {
       WordGenerator.instance = new WordGenerator();
     }
     return WordGenerator.instance;
+  }
+
+  private createImageModule(): any {
+    try {
+      return new ImageModule({
+        centered: false,
+        getImage: (tagValue: string) => {
+          console.log("[ImageModule] getImage llamado, tagValue:", tagValue);
+          const activeLogo = useApp.getState().config?.escuela?.logoUrl || "";
+          console.log("[ImageModule] Logo activo:", activeLogo ? "SÍ (tiene datos)" : "NO (vacío)");
+
+          let b64 = (typeof tagValue === "string" && tagValue.length > 50) ? tagValue : activeLogo;
+          if (!b64 || typeof b64 !== "string" || !b64.trim() || b64 === "/logo.jpg" || b64.startsWith("/")) {
+            b64 = ANT_LOGO_BASE64;
+          }
+          if (b64.startsWith("data:")) {
+            const parts = b64.split(",");
+            if (parts[1]) b64 = parts[1];
+          }
+          try {
+            const bytes = base64ToArrayBuffer(b64);
+            console.log("[ImageModule] ArrayBuffer generado, tamaño:", bytes.byteLength, "bytes");
+            return bytes;
+          } catch (e) {
+            console.error("[ImageModule] Error generando bytes, usando fallback:", e);
+            return base64ToArrayBuffer(ANT_LOGO_BASE64);
+          }
+        },
+        getSize: (img: any, tagValue: string, tagName: string) => {
+          console.log("[ImageModule] getSize llamado, tagName:", tagName);
+          const fullTag = String(tagName);
+          
+          const match = fullTag.match(/[_:](\d+)x(\d+)$/i);
+          if (match && match[1] && match[2]) {
+            const width = parseInt(match[1], 10);
+            const height = parseInt(match[2], 10);
+            console.log("[ImageModule] Tamaño parseado del tag:", width, "x", height);
+            return [width, height];
+          }
+
+          console.log("[ImageModule] Usando tamaño default: 240x80");
+          return [240, 80];
+        },
+      });
+    } catch (e) {
+      console.warn("[WordGenerator] Error creando ImageModule fresco:", e);
+      return null;
+    }
   }
 
   private formatDateLong(dStr?: string): string {
@@ -512,7 +572,7 @@ export class WordGenerator {
 
   private async renderDocxTemplate(templateRelativePath: string, templateData: any, outputPath: string, isSingleDoc: boolean = false): Promise<string> {
     console.log("[WordGenerator] Rellenando plantilla oficial docxtemplater:", templateRelativePath, "->", outputPath);
-    
+
     const cleanPath = templateRelativePath.replace(/^\/+/, "");
     let arrayBuffer: ArrayBuffer | null = null;
 
@@ -555,14 +615,32 @@ export class WordGenerator {
       throw new Error(`No se pudo cargar la plantilla oficial Word desde '${templateRelativePath}'`);
     }
 
+    const storeConfig = useApp.getState().config;
+    const logoUrl = storeConfig?.escuela?.logoUrl || "";
+
     const zip = new PizZip(arrayBuffer);
+    const mainImgMod = this.createImageModule();
+
     const doc = new Docxtemplater(zip, {
       paragraphLoop: true,
       linebreaks: true,
+      nullGetter: () => "",
+      modules: mainImgMod ? [mainImgMod] : [],
+      parser: (tag: string) => {
+        if (typeof tag === "string" && (tag.startsWith("logoEscuela") || tag.startsWith("%logoEscuela"))) {
+          return {
+            get: (scope: any) => scope.logoEscuela || scope.logoUrl,
+          };
+        }
+        return {
+          get: (scope: any) => {
+            if (tag === ".") return scope;
+            return scope ? scope[tag] : "";
+          },
+        };
+      },
     });
 
-    // Inyectar datos por defecto de la Directiva y Escuela para evitar undefined
-    const storeConfig = useApp.getState().config;
     const defaultFirmasData: Record<string, string> = {};
     if (storeConfig?.firmas) {
       Object.entries(storeConfig.firmas).forEach(([k, val]) => {
@@ -597,6 +675,9 @@ export class WordGenerator {
       escuelaSucursal: storeConfig?.escuela?.sucursal || "Condado",
       resolucionAnt: storeConfig?.escuela?.resolucion || "18 DCTS-ANT-2013",
       resolucion: storeConfig?.escuela?.resolucion || "18 DCTS-ANT-2013",
+      logoEscuela: logoUrl || ANT_LOGO_BASE64,
+      logo_escuela: logoUrl || ANT_LOGO_BASE64,
+      logoUrl: logoUrl || ANT_LOGO_BASE64,
       instructorEdVial: edVialInst,
       instructorMecanica: mecanicaInst,
       instructorPAuxilios: pAuxiliosInst,
@@ -811,6 +892,7 @@ export class WordGenerator {
             const resVal = String(mergedData.resolucionAnt || mergedData.resolucion || "18 DCTS-ANT-2013");
             hXml = hXml.replace(/\{[^}]*resolucionAnt[^}]*\}/gi, resVal);
             hXml = hXml.replace(/\{[^}]*resolucion[^}]*\}/gi, resVal);
+            hXml = hXml.replace(/\{%?logoEscuela[^}]*\}/gi, "");
             zip.file(fileName, hXml);
           }
         } catch (e) {
@@ -832,8 +914,89 @@ export class WordGenerator {
         delete singleData.estudiantes;
 
         const singleZip = new PizZip(arrayBuffer);
-        const singleDoc = new Docxtemplater(singleZip, { paragraphLoop: true, linebreaks: true });
+        const singleImgMod = this.createImageModule();
+        const singleDoc = new Docxtemplater(singleZip, {
+          paragraphLoop: true,
+          linebreaks: true,
+          nullGetter: () => "",
+          modules: singleImgMod ? [singleImgMod] : [],
+          parser: (tag: string) => {
+            if (typeof tag === "string" && (tag.startsWith("logoEscuela") || tag.startsWith("%logoEscuela"))) {
+              return {
+                get: (scope: any) => scope.logoEscuela || scope.logoUrl,
+              };
+            }
+            return {
+              get: (scope: any) => {
+                if (tag === ".") return scope;
+                return scope ? scope[tag] : "";
+              },
+            };
+          },
+        });
         singleDoc.render(singleData);
+
+        // ─── COPIAR HEADERS MODIFICADOS DESDE singleZip HACIA zip PRINCIPAL ───
+        // El bucle solo extrae el <w:body> de cada estudiante. Si la plantilla
+        // tiene el logo en el header, debemos copiar los headers modificados
+        // al zip principal para que aparezcan en el documento final.
+        // Solo necesitamos hacerlo una vez (primer estudiante) porque el logo
+        // de la escuela es el mismo para todas las páginas.
+        
+        if (i === 0) {
+          Object.keys(singleZip.files).forEach((fileName) => {
+            // 1. Copiar archivos de header (header1.xml, header2.xml, etc.)
+            if (fileName.startsWith("word/header") && fileName.endsWith(".xml")) {
+              const headerContent = singleZip.file(fileName)?.asText();
+              if (headerContent) {
+                zip.file(fileName, headerContent);
+              }
+            }
+            // 2. Copiar relaciones de headers (header1.xml.rels, etc.)
+            // El ImageModule guarda las relaciones de imagen aquí cuando el logo
+            // está en el header, NO en document.xml.rels
+            if (fileName.startsWith("word/_rels/header") && fileName.endsWith(".xml.rels")) {
+              const relsContent = singleZip.file(fileName)?.asText();
+              if (relsContent) {
+                zip.file(fileName, relsContent);
+              }
+            }
+          });
+        }
+        // ───────────────────────────────────────────────────────────────────────
+
+        // ─── COPIAR IMÁGENES Y RELACIONES DESDE singleZip HACIA zip PRINCIPAL ───
+        // El ImageModule guarda la imagen en singleZip, pero el XML del body
+        // se extrae y se pega en zip. Necesitamos copiar los archivos de media
+        // y las relaciones para que las imágenes no aparezcan rotas.
+        
+        // 1. Copiar archivos de media (word/media/*) desde singleZip hacia zip
+        Object.keys(singleZip.files).forEach((fileName) => {
+          if (fileName.startsWith("word/media/")) {
+            const mediaContent = singleZip.file(fileName)?.asArrayBuffer() || singleZip.file(fileName)?.asUint8Array();
+            if (mediaContent) {
+              zip.file(fileName, mediaContent);
+            }
+          }
+        });
+
+        // 2. Fusionar relaciones XML desde singleZip hacia zip
+        const singleRels = singleZip.file("word/_rels/document.xml.rels")?.asText() || "";
+        let outerRels = zip.file("word/_rels/document.xml.rels")?.asText() || "";
+        
+        if (singleRels && outerRels) {
+          // Extraer todos los <Relationship ... /> de singleRels
+          const singleMatches = singleRels.match(/<Relationship[^>]*\/>/g) || [];
+          singleMatches.forEach((relTag) => {
+            const idMatch = relTag.match(/Id="([^"]+)"/);
+            if (idMatch && idMatch[1] && !outerRels.includes(`Id="${idMatch[1]}"`)) {
+              // Insertar antes de </Relationships>
+              outerRels = outerRels.replace("</Relationships>", `${relTag}\n</Relationships>`);
+            }
+          });
+          zip.file("word/_rels/document.xml.rels", outerRels);
+        }
+        // ───────────────────────────────────────────────────────────────────────
 
         const singleXml = singleZip.file("word/document.xml")?.asText() || "";
         const bodyMatch = singleXml.match(/<w:body[^>]*>([\s\S]*)<\/w:body>/i);
@@ -943,7 +1106,7 @@ export class WordGenerator {
       representanteCargo: storeConfig.firmas?.representante?.cargo || "Representante Legal",
     };
 
-    return this.renderDocxTemplate("Fase 1/OFI-1152-2026 oficio autorizacion.docx", templateData, outputPath);
+    return this.renderDocxTemplate("Fase 1/OficioAutorizacionCompra.docx", templateData, outputPath);
   }
 
   // 2. Oficio de Compra de Permisos (Plantilla Fase 1)
@@ -1023,7 +1186,7 @@ export class WordGenerator {
       remitenteOficio: data.remitenteOficio || "Director De La Dirección Provincial De Pichincha",
     };
 
-    return this.renderDocxTemplate("Fase 1/OFI 1151 026 compra permisos.docx", templateData, outputPath);
+    return this.renderDocxTemplate("Fase 1/OficioCompraPermisos.docx", templateData, outputPath);
   }
 
   private formatDateShortSlash(val?: string): string {
@@ -1162,9 +1325,9 @@ export class WordGenerator {
     };
 
     try {
-      return await this.renderDocxTemplate("Fase 3/OFICIO LEGALIZACION 2026-1153 DAIC 019.docx", templateData, outputPath, true);
+      return await this.renderDocxTemplate("Fase 3/OficioLegalizacion.docx", templateData, outputPath, true);
     } catch {
-      return await this.renderDocxTemplate("Fase 1/OFI 1151 026 compra permisos.docx", templateData, outputPath, true);
+      return await this.renderDocxTemplate("Fase 1/OficioCompraPermisos.docx", templateData, outputPath, true);
     }
   }
 
@@ -1241,7 +1404,7 @@ export class WordGenerator {
       ...mappedStudents[0],
     };
 
-    return this.renderDocxTemplate("Fase 2/ACUERDO DE ENSEÑANZA.docx", templateData, outputPath);
+    return this.renderDocxTemplate("Fase 2/AcuerdoDeEnsenanza.docx", templateData, outputPath);
   }
 
   private generateCourseDates(startDateStr: string): string[] {
@@ -1389,7 +1552,7 @@ export class WordGenerator {
       ...mappedStudents[0],
     };
 
-    return this.renderDocxTemplate("Fase 2/FICHA TEORIA.docx", templateData, outputPath);
+    return this.renderDocxTemplate("Fase 2/FichaTeorica.docx", templateData, outputPath);
   }
 
   // 6. Acta Parte 1 (Fase 2/PARTE 1 ACTA DE CALIFICACIONES.docx)
@@ -1466,7 +1629,7 @@ export class WordGenerator {
       ...mappedStudents[0],
     };
 
-    return this.renderDocxTemplate("Fase 2/PARTE 1 ACTA DE CALIFICACIONES.docx", templateData, outputPath);
+    return this.renderDocxTemplate("Fase 2/ActaParte1.docx", templateData, outputPath);
   }
 
   // 7. Acta Parte 2 (.docx)
@@ -1521,7 +1684,7 @@ export class WordGenerator {
       estudiantes: mappedStudents,
     };
 
-    return this.renderDocxTemplate("Fase 4/PARTE 2 ACTA DE CALIFICACIONES.docx", templateData, outputPath);
+    return this.renderDocxTemplate("Fase 4/ActaParte2.docx", templateData, outputPath);
   }
 
   // Adapter router para compatibilidad transparente con use cases
@@ -1706,6 +1869,6 @@ export class WordGenerator {
       notaPractica: firstSt.notaPractica || firstSt.practica || firstSt.examenPractico || "17,00",
     };
 
-    return this.renderDocxTemplate("Fase 4/IMPRESION DE TITULOS.docx", templateData, outputPath);
+    return this.renderDocxTemplate("Fase 4/Titulos.docx", templateData, outputPath);
   }
 }
