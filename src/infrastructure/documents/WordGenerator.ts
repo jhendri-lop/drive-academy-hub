@@ -321,7 +321,18 @@ export class WordGenerator {
       return nameA.localeCompare(nameB, "es", { sensitivity: "base" });
     });
 
-    const startActaNum = Number(data.actaInicio || data.secuencialActa || data.numero_acta || storeConfig.secuenciales?.actas || 3251);
+    const rawActaCandidate = data.actaInicio ?? data.secuencialActa ?? data.actaInicial;
+    let startActaNum = NaN;
+    if (rawActaCandidate !== undefined && rawActaCandidate !== null) {
+      const parsedCandidate = parseInt(String(rawActaCandidate).replace(/\D/g, ""), 10);
+      if (!isNaN(parsedCandidate) && parsedCandidate > 0) {
+        startActaNum = parsedCandidate;
+      }
+    }
+    if (isNaN(startActaNum)) {
+      const storeSecuencial = Number(storeConfig.secuenciales?.actas);
+      startActaNum = (!isNaN(storeSecuencial) && storeSecuencial > 0) ? storeSecuencial : 3251;
+    }
     const hPractico = data.horarioPractico || data.horarioPractica || targetCourse.horarioPractica || "14H00-16H00";
     const hTeorico = this.cleanHorarioTeoria(data.horarioTeorico || data.horarioTeoria || targetCourse.horarioTeoria || "18H00-20H00");
     const todayIso = new Date().toISOString().split("T")[0];
@@ -570,6 +581,184 @@ export class WordGenerator {
     });
   }
 
+  private buildUniversalTemplateData(options: {
+    course?: any;
+    students?: any[];
+    oficioNumero?: string;
+    oficioMatriz?: string;
+    fechaOficioMatriz?: string;
+    remitenteOficio?: string;
+    numeroTramite?: string;
+    totalAprobados?: number;
+    totalReprobados?: number;
+    additionalData?: Record<string, any>;
+  } = {}): Record<string, any> {
+    const storeConfig = useApp.getState().config;
+
+    const targetCourse = options.course || {};
+    const inputStudents = options.students && options.students.length > 0
+      ? options.students
+      : (options.additionalData?.students || options.additionalData?.estudiantes || []);
+
+    const mappedStudents = inputStudents.length > 0
+      ? this.mapAndSortStudents(inputStudents, options.additionalData || {}, targetCourse, storeConfig)
+      : [];
+
+    const firstSt = mappedStudents[0] || {};
+    const lastSt = mappedStudents[mappedStudents.length - 1] || firstSt;
+
+    const todayIso = new Date().toISOString().split("T")[0];
+    const fechaActualHoy = this.formatDateLong(todayIso);
+    const todayDate = new Date();
+    const fechaCorta = `${String(todayDate.getDate()).padStart(2, "0")}/${String(todayDate.getMonth() + 1).padStart(2, "0")}/${todayDate.getFullYear()}`;
+
+    const cInicioRaw = targetCourse.inicioCurso || targetCourse.fechaCursoInicio || options.additionalData?.cursoInicio || options.additionalData?.fechaCursoInicio || "27/07/2026";
+    const cFinRaw = targetCourse.finCurso || targetCourse.fechaCursoFin || options.additionalData?.cursoFin || options.additionalData?.fechaCursoFin || "04/08/2026";
+    const mInicioRaw = targetCourse.inicioMatricula || targetCourse.inicioMatriculas || targetCourse.fechaMatriculaInicio || options.additionalData?.matriculaInicio || options.additionalData?.fechaMatriculaInicio || "13/07/2026";
+    const mFinRaw = targetCourse.finMatricula || targetCourse.finMatriculas || targetCourse.fechaMatriculaFin || options.additionalData?.matriculaFin || options.additionalData?.fechaMatriculaFin || "21/07/2026";
+
+    const cInicio = this.formatDateExcel(cInicioRaw, "27/07/2026");
+    const cFin = this.formatDateExcel(cFinRaw, "04/08/2026");
+    const mInicio = this.formatDateExcel(mInicioRaw, "13/07/2026");
+    const mFin = this.formatDateExcel(mFinRaw, "21/07/2026");
+    const cursoFinAntText = this.subtractOneDay(cFinRaw);
+
+    const insts = storeConfig?.instructores || [];
+    const edVialInst = insts.find((i: any) => /vial/i.test(i.materiaTeorica || ""))?.nombre || (storeConfig?.firmas as any)?.teoricos?.edVial || "Francisco Ortuño";
+    const mecanicaInst = insts.find((i: any) => /mec/i.test(i.materiaTeorica || ""))?.nombre || (storeConfig?.firmas as any)?.teoricos?.mecanica || "Mario Peralvo";
+    const pAuxiliosInst = insts.find((i: any) => /auxilio/i.test(i.materiaTeorica || ""))?.nombre || (storeConfig?.firmas as any)?.teoricos?.pAuxilios || "Dr. Rafael Parra";
+    const psicologiaInst = insts.find((i: any) => /psico/i.test(i.materiaTeorica || ""))?.nombre || (storeConfig?.firmas as any)?.teoricos?.psicologia || "Luis De La Torre";
+
+    const cantidadNum = mappedStudents.length;
+    const spanishNumbers: Record<number, string> = {
+      1: "UN", 2: "DOS", 3: "TRES", 4: "CUATRO", 5: "CINCO", 6: "SEIS", 7: "SIETE", 8: "OCHO", 9: "NUEVE", 10: "DIEZ",
+      11: "ONCE", 12: "DOCE", 13: "TRECE", 14: "CATORCE", 15: "QUINCE", 16: "DIECISÉIS", 17: "DIECISIETE", 18: "DIECIOCHO",
+      19: "DIECINUEVE", 20: "VEINTE", 21: "VEINTIUNO", 22: "VEINTIDÓS", 23: "VEINTITRÉS", 24: "VEINTICUATRO", 25: "VEINTICINCO"
+    };
+    const cantidadTexto = spanishNumbers[cantidadNum] || String(cantidadNum);
+
+    const hPracticoRaw = options.additionalData?.horarioPractico || options.additionalData?.horarioPractica || targetCourse.horarioPractica || targetCourse.horarioPractico || "14H00-16H00";
+    const hTeoricoRaw = options.additionalData?.horarioTeorico || options.additionalData?.horarioTeoria || targetCourse.horarioTeoria || targetCourse.horarioTeorico || "18H00-20H00";
+    const hPractico = String(hPracticoRaw).split("|")[0]!.trim();
+    const hTeorico = this.cleanHorarioTeoria(String(hTeoricoRaw).split("|")[0]!.trim());
+
+    const logoUrl = storeConfig?.escuela?.logoUrl || "";
+
+    const primerUltimoText = mappedStudents.length > 0
+      ? `${firstSt.estudianteNombre || firstSt.fullName || ""} hasta ${lastSt.estudianteNombre || lastSt.fullName || ""}`
+      : "";
+
+    return {
+      // === FECHAS ===
+      fechaActual: fechaActualHoy,
+      fechaHoy: fechaActualHoy,
+      fechaSistema: fechaActualHoy,
+      fechaEmision: fechaActualHoy,
+      fechaEmisionLarga: fechaActualHoy,
+      fechaEmisionCorta: fechaCorta,
+
+      // === ESCUELA ===
+      escuelaNombre: storeConfig?.escuela?.nombre || "Drive Academy S.A",
+      escuelaSucursal: storeConfig?.escuela?.sucursal || "Condado",
+      resolucionAnt: storeConfig?.escuela?.resolucion || "18 DCTS-ANT-2013",
+      resolucion: storeConfig?.escuela?.resolucion || "18 DCTS-ANT-2013",
+      logoEscuela: logoUrl || ANT_LOGO_BASE64,
+      logo_escuela: logoUrl || ANT_LOGO_BASE64,
+      logoUrl: logoUrl || ANT_LOGO_BASE64,
+
+      // === FIRMAS ===
+      directorNombre: storeConfig?.firmas?.director?.nombre || "Ing. Marco Villacís",
+      directorCargo: storeConfig?.firmas?.director?.cargo || "Director General",
+      directorAntNombre: storeConfig?.firmas?.directorAnt?.nombre || "Espíndola Lara Oscar Omar",
+      directorAntCargo: storeConfig?.firmas?.directorAnt?.cargo || "Director Provincial",
+      cargoAnt: storeConfig?.firmas?.directorAnt?.cargo || "Director Provincial",
+      secretariaNombre: storeConfig?.firmas?.secretaria?.nombre || "Lcda. Andrea Suárez",
+      secretariaCargo: storeConfig?.firmas?.secretaria?.cargo || "Secretaria",
+      representanteNombre: storeConfig?.firmas?.representante?.nombre || "Leonidas Francisco Ortuño",
+      representanteCargo: storeConfig?.firmas?.representante?.cargo || "Representante Legal",
+
+      // === INSTRUCTORES ===
+      instructorEdVial: edVialInst,
+      instructorMecanica: mecanicaInst,
+      instructorPAuxilios: pAuxiliosInst,
+      instructorPsicologia: psicologiaInst,
+      instEdVial: edVialInst,
+      instMecanica: mecanicaInst,
+      instPAuxilios: pAuxiliosInst,
+      instPsicologia: psicologiaInst,
+
+      // === CURSO ===
+      cursoNombre: targetCourse.nombre || options.additionalData?.cursoNombre || options.additionalData?.curso || "DAIC 020 2026",
+      tipoLicencia: (targetCourse.tipoLicencia || options.additionalData?.tipoLicencia || options.additionalData?.categoria || "B").replace(/^TIPO\s*/i, ""),
+      cursoInicio: cInicio,
+      cursoFin: cFin,
+      fechaCursoInicio: cInicio,
+      fechaCursoFin: cFin,
+      cursoStart: cInicio,
+      cursoEnd: cFin,
+
+      // === MATRÍCULA ===
+      matriculaInicio: mInicio,
+      matriculaFin: mFin,
+      fechaMatriculaInicio: mInicio,
+      fechaMatriculaFin: mFin,
+      matriculaStart: mInicio,
+      matriculaEnd: mFin,
+      inicioMatriculas: mInicio,
+      finMatriculas: mFin,
+      finMatriculasLargo: this.formatDateFullSpanish(mFinRaw),
+      matriculaFinLargo: this.formatDateFullSpanish(mFinRaw),
+      finDeMatriculasLargo: this.formatDateFullSpanish(mFinRaw),
+      cursoFinAnterior: cursoFinAntText,
+      cursoFinPrevio: cursoFinAntText,
+      fechaFinAnterior: cursoFinAntText,
+      cursoFinMenosUnDia: cursoFinAntText,
+
+      // === HORARIOS ===
+      horarioPractico: hPractico,
+      horarioPractica: hPractico,
+      horarioTeorico: hTeorico,
+      horarioTeoria: hTeorico,
+
+      // === ESTUDIANTES ===
+      estudiantes: mappedStudents,
+      cantidadEstudiantes: cantidadNum,
+      cantidadEstudiantesTexto: cantidadTexto,
+      cantidadEstudiantesPalabras: cantidadTexto,
+      totalAprobados: options.totalAprobados ?? cantidadNum,
+      totalReprobados: options.totalReprobados ?? 0,
+
+      // === PRIMER ESTUDIANTE ===
+      estudianteNombre: firstSt.estudianteNombre || firstSt.fullName || firstSt.nombres || "",
+      notaTeoria: firstSt.notaPromedio || firstSt.promedioTeorico || firstSt.promedio || "",
+      notaPractica: firstSt.notaPractica || firstSt.practica || firstSt.examenPractico || "",
+      ...firstSt,
+
+      // === OFICIO ===
+      oficioNumero: options.oficioNumero || options.additionalData?.oficioNumero || options.additionalData?.oficio_numero || "1152",
+      oficio_numero: options.oficioNumero || options.additionalData?.oficioNumero || options.additionalData?.oficio_numero || "1152",
+      oficioMatriz: options.oficioMatriz || options.additionalData?.oficioMatriz || "",
+      fechaOficioMatriz: options.fechaOficioMatriz || options.additionalData?.fechaOficioMatriz || fechaActualHoy,
+      remitenteOficio: options.remitenteOficio || options.additionalData?.remitenteOficio || "",
+
+      // === TRÁMITE ===
+      numeroTramite: options.numeroTramite || options.additionalData?.numeroTramite || "",
+      numero_tramite: options.numeroTramite || options.additionalData?.numero_tramite || "",
+      tramiteNumero: options.numeroTramite || options.additionalData?.tramiteNumero || "",
+      numeroTramiteIngreso: options.numeroTramite || options.additionalData?.numeroTramiteIngreso || "",
+
+      // === UTILIDADES ===
+      periodo: this.formatPeriodo(cInicioRaw, cFinRaw),
+      periodoCurso: this.formatPeriodo(cInicioRaw, cFinRaw),
+      primerUltimoEstudiante: primerUltimoText,
+      primerEstudianteUltimoEstudiante: primerUltimoText,
+      rangoEstudiantes: primerUltimoText,
+
+      // === EXTRAS ===
+      ...options.additionalData,
+    };
+  }
+
   private async renderDocxTemplate(templateRelativePath: string, templateData: any, outputPath: string, isSingleDoc: boolean = false): Promise<string> {
     console.log("[WordGenerator] Rellenando plantilla oficial docxtemplater:", templateRelativePath, "->", outputPath);
 
@@ -649,61 +838,18 @@ export class WordGenerator {
       });
     }
 
-    const insts = storeConfig?.instructores || [];
-    const edVialInst = insts.find((i: any) => /vial/i.test(i.materiaTeorica || ""))?.nombre || (storeConfig?.firmas as any)?.teoricos?.edVial || "Francisco Ortuño";
-    const mecanicaInst = insts.find((i: any) => /mec/i.test(i.materiaTeorica || ""))?.nombre || (storeConfig?.firmas as any)?.teoricos?.mecanica || "Mario Peralvo";
-    const pAuxiliosInst = insts.find((i: any) => /auxilio/i.test(i.materiaTeorica || ""))?.nombre || (storeConfig?.firmas as any)?.teoricos?.pAuxilios || "Dr. Rafael Parra";
-    const psicologiaInst = insts.find((i: any) => /psico/i.test(i.materiaTeorica || ""))?.nombre || (storeConfig?.firmas as any)?.teoricos?.psicologia || "Luis De La Torre";
-
-    const todayIso = new Date().toISOString().split("T")[0];
-    const fechaActualHoy = this.formatDateLong(todayIso);
-
-    const cFinVal = templateData?.cursoFin || templateData?.finCurso || templateData?.fechaCursoFin || "24/07/2026";
-    const cursoFinAntText = this.subtractOneDay(cFinVal);
+    // Regla 1 (Prioridad): buildUniversalTemplateData base -> templateData específico -> defaultFirmasData / fallback
+    const universalBase = this.buildUniversalTemplateData({
+      additionalData: templateData,
+    });
 
     const mergedData = {
-      directorNombre: storeConfig?.firmas?.director?.nombre || "Ing. Marco Villacís",
-      directorCargo: storeConfig?.firmas?.director?.cargo || "Director General",
-      directorAntNombre: storeConfig?.firmas?.directorAnt?.nombre || "Espíndola Lara Oscar Omar",
-      directorAntCargo: storeConfig?.firmas?.directorAnt?.cargo || "Director Provincial",
-      cargoAnt: storeConfig?.firmas?.directorAnt?.cargo || "Director Provincial",
-      secretariaNombre: storeConfig?.firmas?.secretaria?.nombre || "Lcda. Andrea Suárez",
-      secretariaCargo: storeConfig?.firmas?.secretaria?.cargo || "Secretaria",
-      representanteNombre: storeConfig?.firmas?.representante?.nombre || "Leonidas Francisco Ortuño",
-      representanteCargo: storeConfig?.firmas?.representante?.cargo || "Representante Legal",
-      escuelaNombre: storeConfig?.escuela?.nombre || "Drive Academy S.A",
-      escuelaSucursal: storeConfig?.escuela?.sucursal || "Condado",
-      resolucionAnt: storeConfig?.escuela?.resolucion || "18 DCTS-ANT-2013",
-      resolucion: storeConfig?.escuela?.resolucion || "18 DCTS-ANT-2013",
-      logoEscuela: logoUrl || ANT_LOGO_BASE64,
-      logo_escuela: logoUrl || ANT_LOGO_BASE64,
-      logoUrl: logoUrl || ANT_LOGO_BASE64,
-      instructorEdVial: edVialInst,
-      instructorMecanica: mecanicaInst,
-      instructorPAuxilios: pAuxiliosInst,
-      instructorPsicologia: psicologiaInst,
-      instEdVial: edVialInst,
-      instMecanica: mecanicaInst,
-      instPAuxilios: pAuxiliosInst,
-      instPsicologia: psicologiaInst,
-      fechaActual: fechaActualHoy,
-      fechaHoy: fechaActualHoy,
-      fechaSistema: fechaActualHoy,
-      periodo: this.formatPeriodo(templateData?.cursoInicio || templateData?.inicioCurso, templateData?.cursoFin || templateData?.finCurso),
-      periodoCurso: this.formatPeriodo(templateData?.cursoInicio || templateData?.inicioCurso, templateData?.cursoFin || templateData?.finCurso),
-      primerUltimoEstudiante: (templateData?.primerUltimoEstudiante || templateData?.primerEstudianteUltimoEstudiante || templateData?.rangoEstudiantes) || "",
-      primerEstudianteUltimoEstudiante: (templateData?.primerUltimoEstudiante || templateData?.primerEstudianteUltimoEstudiante || templateData?.rangoEstudiantes) || "",
-      rangoEstudiantes: (templateData?.primerUltimoEstudiante || templateData?.primerEstudianteUltimoEstudiante || templateData?.rangoEstudiantes) || "",
-      finMatriculasLargo: this.formatDateFullSpanish(templateData?.finMatricula || templateData?.matriculaFin || templateData?.fechaMatriculaFin),
-      matriculaFinLargo: this.formatDateFullSpanish(templateData?.finMatricula || templateData?.matriculaFin || templateData?.fechaMatriculaFin),
-      finDeMatriculasLargo: this.formatDateFullSpanish(templateData?.finMatricula || templateData?.matriculaFin || templateData?.fechaMatriculaFin),
-      cursoFinAnterior: cursoFinAntText,
-      cursoFinPrevio: cursoFinAntText,
-      fechaFinAnterior: cursoFinAntText,
-      cursoFinMenosUnDia: cursoFinAntText,
-      ...defaultFirmasData,
+      ...universalBase,
       ...templateData,
+      ...defaultFirmasData,
     };
+
+    const fechaActualHoy = mergedData.fechaActual || this.formatDateLong(new Date().toISOString().split("T")[0]);
 
     // Formatear automáticamente marcas X1 (Cédula), X2 (Pasaporte), fechaNacimientoLarga y fechaActual
     if (Array.isArray(mergedData.estudiantes)) {
@@ -910,7 +1056,166 @@ export class WordGenerator {
 
       for (let i = 0; i < mergedData.estudiantes.length; i++) {
         const st = mergedData.estudiantes[i];
-        const singleData = { ...mergedData, ...st };
+        const studentName = (st.estudianteNombre || st.fullName || st.nombres || st.nombre_estudiante || st.nombre || "").toUpperCase();
+        const studentCedula = st.cedula || st.pasaporte || st.numeroDocumento || st.documento || "";
+        const studentFnRaw = st.fechaNacimiento || st.fecha_nacimiento || st.nacimiento || st.birthDate || "";
+
+        const docTypeRaw = String(st.tipoDocumento || st.documentoTipo || st.tipo_documento || mergedData.tipoDocumento || "").toLowerCase();
+        const isPasaporte = docTypeRaw.includes("pasaporte");
+        const isCedula = !isPasaporte;
+        const tipoDocNombre = isPasaporte ? "Pasaporte" : "Cédula";
+        const tipoDocCorta = isPasaporte ? "PAS." : "CC.";
+        const tipoDocAbv = isPasaporte ? "PAS" : "CC";
+        const valX1 = st.X1 || st.x1 || (isCedula ? "X" : "");
+        const valX2 = st.X2 || st.x2 || (isPasaporte ? "X" : "");
+        const valMarcaCedula = st.marcaCedula || (isCedula ? "( X )" : "(   )");
+        const valMarcaPasaporte = st.marcaPasaporte || (isPasaporte ? "( X )" : "(   )");
+
+        const studentPhone = st.celular || st.phone || st.telefono || st.movil || "";
+        const studentEmail = st.email || st.correo || st.correoElectronico || "";
+        const studentSangre = st.tipoSangre || st.tipo_sangre || st.sangre || "";
+        const studentNacionalidad = st.nacionalidad || st.pais || "";
+        const studentDireccion = st.direccion || st.direccionDomicilio || st.domicilio || "";
+        const studentCanton = st.canton || "";
+
+        const studentTeoria = st.notaPromedio || st.promedioTeorico || st.promedio || st.notaTeoria || st.nota_teoria || "";
+        const studentPractica = st.notaPractica || st.practica || st.examenPractico || st.nota_practica || "";
+        const studentFoto = st.foto || st.fotoUrl || st.imagen || "";
+
+        const studentHorarioTeorico = st.horarioTeorico || st.horarioTeoria || mergedData.horarioTeorico || mergedData.horarioTeoria || "";
+        const studentHorarioPractico = st.horarioPractico || st.horarioPractica || mergedData.horarioPractico || mergedData.horarioPractica || "";
+
+        // Calcular número de acta directamente en el bucle (actaBase + i)
+        const rawActaBase = mergedData.actaInicio ?? mergedData.numeroActa ?? mergedData.actaBase ?? mergedData.secuencialActa ?? storeConfig.secuenciales?.actas;
+        let actaBase = parseInt(String(rawActaBase).replace(/\D/g, ""), 10);
+        if (isNaN(actaBase) || actaBase <= 0) {
+          actaBase = 3251;
+        }
+        const studentActaNum = String(actaBase + i);
+
+        const singleData = {
+          ...mergedData,
+          ...st,
+
+          // Sobrescribir explícitamente TODOS los campos del estudiante i (prioridad):
+          n: st.n || (i + 1),
+          actaNumero: studentActaNum,
+          numeroActa: studentActaNum,
+          numero_acta: studentActaNum,
+          nroActa: studentActaNum,
+          acta: studentActaNum,
+          secuencialActa: studentActaNum,
+          actaSecuencial: studentActaNum,
+          numActa: studentActaNum,
+
+          estudianteNombre: studentName,
+          fullName: studentName,
+          nombres: studentName,
+          nombre: studentName,
+          nombreEstudiante: studentName,
+          nombre_estudiante: studentName,
+
+          cedula: studentCedula,
+          pasaporte: st.pasaporte || studentCedula,
+          numeroDocumento: st.numeroDocumento || studentCedula,
+          documento: st.documento || studentCedula,
+
+          tipoDocumento: st.tipoDocumento || tipoDocNombre,
+          tipo_documento: st.tipo_documento || tipoDocNombre,
+          tipoDocumentoNombre: st.tipoDocumentoNombre || tipoDocNombre,
+          tipoDocumentoTexto: st.tipoDocumentoTexto || tipoDocNombre,
+          tipoDocumentoCorta: st.tipoDocumentoCorta || tipoDocCorta,
+          tipoDocCorta: st.tipoDocCorta || tipoDocCorta,
+          tipoDocumentoAbv: st.tipoDocumentoAbv || tipoDocAbv,
+          documentoTipo: st.documentoTipo || tipoDocNombre,
+          X1: valX1,
+          X2: valX2,
+          x1: valX1,
+          x2: valX2,
+          marcaCedula: valMarcaCedula,
+          marcaPasaporte: valMarcaPasaporte,
+
+          fechaNacimiento: st.fechaNacimiento || studentFnRaw,
+          fechaNacimientoLarga: st.fechaNacimientoLarga || (studentFnRaw ? this.formatDateLong(studentFnRaw) : ""),
+          edad: st.edad || "",
+          sexo: st.sexo || "",
+          nacionalidad: studentNacionalidad,
+          tipoSangre: studentSangre,
+          sangre: studentSangre,
+
+          direccion: studentDireccion,
+          canton: studentCanton,
+
+          celular: studentPhone,
+          phone: studentPhone,
+          telefono: studentPhone,
+          movil: studentPhone,
+          celularEstudiante: st.celularEstudiante || studentPhone,
+          telefonoEstudiante: st.telefonoEstudiante || studentPhone,
+          email: studentEmail,
+          correo: studentEmail,
+
+          nivelInstruccion: st.nivelInstruccion || "",
+          horarioTeoria: studentHorarioTeorico,
+          horarioTeorico: studentHorarioTeorico,
+          horarioPractica: studentHorarioPractico,
+          horarioPractico: studentHorarioPractico,
+          observaciones: st.observaciones || "",
+
+          lentes: st.lentes,
+          usaLentes: st.usaLentes,
+          usarLentes: st.usarLentes,
+          lentesTexto: st.lentesTexto,
+          marcaLentes: st.marcaLentes,
+          lentesSi: st.lentesSi,
+          lentesNo: st.lentesNo,
+
+          numeroPermiso: st.numeroPermiso,
+          permisoAprendizaje: st.permisoAprendizaje,
+          numeroPermisoAprendizaje: st.numeroPermisoAprendizaje,
+          numero_permiso: st.numero_permiso,
+
+          edVial: st.edVial,
+          notaEdVial: st.notaEdVial,
+          notaEducacionVial: st.notaEducacionVial,
+          educacionVial: st.educacionVial,
+          nota_ed_vial: st.nota_ed_vial,
+
+          mecanica: st.mecanica,
+          notaMecanica: st.notaMecanica,
+          notaMecanicaBasica: st.notaMecanicaBasica,
+          mecanicaBasica: st.mecanicaBasica,
+          nota_mecanica: st.nota_mecanica,
+
+          pAuxilios: st.pAuxilios,
+          primerosAuxilios: st.primerosAuxilios,
+          notaPAuxilios: st.notaPAuxilios,
+          notaPrimerosAuxilios: st.notaPrimerosAuxilios,
+          nota_p_auxilios: st.nota_p_auxilios,
+
+          psicologia: st.psicologia,
+          notaPsicologia: st.notaPsicologia,
+          nota_psicologia: st.nota_psicologia,
+
+          notaTeoria: studentTeoria,
+          notaTeorica: st.notaTeorica || studentTeoria,
+          nota_teoria: st.nota_teoria || studentTeoria,
+          nota_teorica: st.nota_teorica || studentTeoria,
+          notaPromedio: st.notaPromedio || studentTeoria,
+          promedio: st.promedio || studentTeoria,
+          promedioTeorico: st.promedioTeorico || studentTeoria,
+          nota_promedio: st.nota_promedio || studentTeoria,
+          promedio_teorico: st.promedio_teorico || studentTeoria,
+
+          notaPractica: studentPractica,
+          practica: st.practica || studentPractica,
+          nota_practica: st.nota_practica || studentPractica,
+          examenPractico: st.examenPractico || studentPractica,
+
+          foto: studentFoto,
+          fotoUrl: st.fotoUrl || studentFoto,
+          imagen: st.imagen || studentFoto,
+        };
         delete singleData.estudiantes;
 
         const singleZip = new PizZip(arrayBuffer);
@@ -1062,51 +1367,26 @@ export class WordGenerator {
     const storeConfig = useApp.getState().config;
     const cantidadNum = data.cantidad || 23;
 
-    const months = [
-      "enero", "febrero", "marzo", "abril", "mayo", "junio",
-      "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
-    ];
-    const rawFecha = (data.fecha || "22 de julio del 2026").trim();
-    let fechaLarga = rawFecha;
-    let fechaCorta = "22/07/2026";
-    if (/^\d{4}-\d{2}-\d{2}$/.test(rawFecha)) {
-      const parts = rawFecha.split("-").map(Number);
-      const y = parts[0] || 2026;
-      const m = parts[1] || 7;
-      const d = parts[2] || 22;
-      fechaLarga = `${d} de ${months[m - 1] || "julio"} del ${y}`;
-      fechaCorta = `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
-    } else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(rawFecha)) {
-      const parts = rawFecha.split("/").map(Number);
-      const d = parts[0] || 22;
-      const m = parts[1] || 7;
-      const y = parts[2] || 2026;
-      fechaLarga = `${d} de ${months[m - 1] || "julio"} del ${y}`;
-      fechaCorta = `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
-    } else {
-      let clean = rawFecha.replace(/^Quito,?\s*/i, "").trim();
-      fechaLarga = clean;
-    }
-
-    const templateData = {
-      fechaEmision: fechaLarga,
-      fechaEmisionLarga: fechaLarga,
-      fechaEmisionCorta: fechaCorta,
+    const templateData = this.buildUniversalTemplateData({
       oficioNumero: data.oficioNumero || "1152",
-      directorAntNombre: data.directorAnt || storeConfig.firmas?.directorAnt?.nombre || "Espíndola Lara Oscar Omar",
-      directorAntCargo: data.cargoAnt || storeConfig.firmas?.directorAnt?.cargo || "Director Provincial",
-      escuelaNombre: storeConfig.escuela?.nombre || "Drive Academy S.A",
-      escuelaSucursal: data.sucursal || storeConfig.escuela?.sucursal || "el Condado",
-      cursoNombre: data.curso || "DAIC-020-2026",
-      cursoInicio: data.fechaInicio || "27/07/2026",
-      cursoFin: data.fechaFin || "4/08/2026",
-      cantidadEstudiantes: cantidadNum,
-      tipoLicencia: (data.categoria || "B").replace(/^TIPO\s*/i, ""),
-      representanteNombre: data.representante || storeConfig.firmas?.representante?.nombre || "Leonidas Francisco Ortuño",
-      representanteCargo: storeConfig.firmas?.representante?.cargo || "Representante Legal",
-    };
+      additionalData: {
+        fechaEmision: data.fecha || undefined,
+        fechaEmisionLarga: data.fecha || undefined,
+        directorAntNombre: data.directorAnt || storeConfig.firmas?.directorAnt?.nombre,
+        directorAntCargo: data.cargoAnt || storeConfig.firmas?.directorAnt?.cargo,
+        escuelaNombre: storeConfig.escuela?.nombre,
+        escuelaSucursal: data.sucursal || storeConfig.escuela?.sucursal,
+        cursoNombre: data.curso,
+        cursoInicio: data.fechaInicio,
+        cursoFin: data.fechaFin,
+        cantidadEstudiantes: cantidadNum,
+        tipoLicencia: (data.categoria || "B").replace(/^TIPO\s*/i, ""),
+        representanteNombre: data.representante || storeConfig.firmas?.representante?.nombre,
+        representanteCargo: storeConfig.firmas?.representante?.cargo,
+      },
+    });
 
-    return this.renderDocxTemplate("Fase 1/OficioAutorizacionCompra.docx", templateData, outputPath);
+    return this.renderDocxTemplate("Fase 1/OficioAutorizacionCompra.docx", templateData, outputPath, true);
   }
 
   // 2. Oficio de Compra de Permisos (Plantilla Fase 1)
@@ -1133,60 +1413,27 @@ export class WordGenerator {
     const storeConfig = useApp.getState().config;
     const cantidadNum = data.cantidad || (data.estudiantes ? data.estudiantes.length : 23);
 
-    const spanishNumbers: Record<number, string> = {
-      1: "UN", 2: "DOS", 3: "TRES", 4: "CUATRO", 5: "CINCO", 6: "SEIS", 7: "SIETE", 8: "OCHO", 9: "NUEVE", 10: "DIEZ",
-      11: "ONCE", 12: "DOCE", 13: "TRECE", 14: "CATORCE", 15: "QUINCE", 16: "DIECISÉIS", 17: "DIECISIETE", 18: "DIECIOCHO",
-      19: "DIECINUEVE", 20: "VEINTE", 21: "VEINTIUNO", 22: "VEINTIDÓS", 23: "VEINTITRÉS", 24: "VEINTICUATRO", 25: "VEINTICINCO"
-    };
-    const cantidadTexto = spanishNumbers[cantidadNum] || String(cantidadNum);
-
-    const months = [
-      "enero", "febrero", "marzo", "abril", "mayo", "junio",
-      "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
-    ];
-    const rawFecha = (data.fecha || "22 de julio del 2026").trim();
-    let fechaLarga = rawFecha;
-    let fechaCorta = "22/07/2026";
-    if (/^\d{4}-\d{2}-\d{2}$/.test(rawFecha)) {
-      const parts = rawFecha.split("-").map(Number);
-      const y = parts[0] || 2026;
-      const m = parts[1] || 7;
-      const d = parts[2] || 22;
-      fechaLarga = `${d} de ${months[m - 1] || "julio"} del ${y}`;
-      fechaCorta = `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
-    } else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(rawFecha)) {
-      const parts = rawFecha.split("/").map(Number);
-      const d = parts[0] || 22;
-      const m = parts[1] || 7;
-      const y = parts[2] || 2026;
-      fechaLarga = `${d} de ${months[m - 1] || "julio"} del ${y}`;
-      fechaCorta = `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
-    } else {
-      let clean = rawFecha.replace(/^Quito,?\s*/i, "").trim();
-      fechaLarga = clean;
-    }
-
-    const templateData = {
-      fechaEmision: fechaLarga,
-      fechaEmisionLarga: fechaLarga,
-      fechaEmisionCorta: fechaCorta,
+    const templateData = this.buildUniversalTemplateData({
       oficioNumero: data.oficioNumero || "1151",
-      directorAntNombre: data.directorAnt || storeConfig.firmas?.directorAnt?.nombre || "Espíndola Lara Oscar Omar",
-      directorAntCargo: data.cargoAnt || storeConfig.firmas?.directorAnt?.cargo || "Director Provincial",
-      escuelaNombre: storeConfig.escuela?.nombre || "Drive Academy S.A",
-      escuelaSucursal: data.sucursal || storeConfig.escuela?.sucursal || "Condado",
-      cursoNombre: data.curso || "DAIC-020-2026",
-      cantidadEstudiantes: cantidadNum,
-      cantidadEstudiantesTexto: cantidadTexto,
-      tipoLicencia: (data.categoria || "B").replace(/^TIPO\s*/i, ""),
-      representanteNombre: data.representante || storeConfig.firmas?.representante?.nombre || "Leonidas Francisco Ortuño",
-      representanteCargo: storeConfig.firmas?.representante?.cargo || "Representante Legal",
       oficioMatriz: data.oficioMatriz || "ANT-DPPIC-2026-6528-OF",
       fechaOficioMatriz: data.fechaOficioMatriz || "06 de julio 2026",
       remitenteOficio: data.remitenteOficio || "Director De La Dirección Provincial De Pichincha",
-    };
+      students: data.estudiantes,
+      additionalData: {
+        fechaEmision: data.fecha || undefined,
+        directorAntNombre: data.directorAnt || storeConfig.firmas?.directorAnt?.nombre,
+        directorAntCargo: data.cargoAnt || storeConfig.firmas?.directorAnt?.cargo,
+        escuelaNombre: storeConfig.escuela?.nombre,
+        escuelaSucursal: data.sucursal || storeConfig.escuela?.sucursal,
+        cursoNombre: data.curso,
+        cantidadEstudiantes: cantidadNum,
+        tipoLicencia: (data.categoria || "B").replace(/^TIPO\s*/i, ""),
+        representanteNombre: data.representante || storeConfig.firmas?.representante?.nombre,
+        representanteCargo: storeConfig.firmas?.representante?.cargo,
+      },
+    });
 
-    return this.renderDocxTemplate("Fase 1/OficioCompraPermisos.docx", templateData, outputPath);
+    return this.renderDocxTemplate("Fase 1/OficioCompraPermisos.docx", templateData, outputPath, true);
   }
 
   private formatDateShortSlash(val?: string): string {
@@ -1223,7 +1470,6 @@ export class WordGenerator {
   public async generateOficioLegalizacion(data: any, outputPath: string): Promise<string> {
     console.log("[WordGenerator] Generando Oficio de Legalización con plantilla Fase 3...", outputPath);
 
-    const storeConfig = useApp.getState().config;
     const storeCursos = useApp.getState().cursos || [];
     const storeEstudiantes = useApp.getState().estudiantes || [];
 
@@ -1251,78 +1497,18 @@ export class WordGenerator {
     }
 
     const studentsList = sourceStudents.length > 0 ? sourceStudents : [data];
-    const mappedStudents = this.mapAndSortStudents(studentsList, data, targetCourse, storeConfig);
-
-    const cantidadNum = mappedStudents.length;
-    const spanishNumbers: Record<number, string> = {
-      1: "UN", 2: "DOS", 3: "TRES", 4: "CUATRO", 5: "CINCO", 6: "SEIS", 7: "SIETE", 8: "OCHO", 9: "NUEVE", 10: "DIEZ",
-      11: "ONCE", 12: "DOCE", 13: "TRECE", 14: "CATORCE", 15: "QUINCE", 16: "DIECISÉIS", 17: "DIECISIETE", 18: "DIECIOCHO",
-      19: "DIECINUEVE", 20: "VEINTE", 21: "VEINTIUNO", 22: "VEINTIDÓS", 23: "VEINTITRÉS", 24: "VEINTICUATRO", 25: "VEINTICINCO"
-    };
-    const cantidadTexto = spanishNumbers[cantidadNum] || String(cantidadNum);
-
-    const rawFecha = String(data.fecha || "").trim();
-    const cleanFecha = rawFecha.replace(/^Quito,?\s*/i, "").trim();
-    const today = new Date();
-    const months = [
-      "enero", "febrero", "marzo", "abril", "mayo", "junio",
-      "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
-    ];
-    let fechaLarga = `${today.getDate()} de ${months[today.getMonth()]} del ${today.getFullYear()}`;
-
-    if (/^\d{4}-\d{2}-\d{2}$/.test(cleanFecha)) {
-      const parts = cleanFecha.split("-").map(Number);
-      const y = parts[0] || today.getFullYear();
-      const m = parts[1] || (today.getMonth() + 1);
-      const d = parts[2] || today.getDate();
-      fechaLarga = `${d} de ${months[m - 1] || "agosto"} del ${y}`;
-    } else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(cleanFecha)) {
-      const parts = cleanFecha.split("/").map(Number);
-      const d = parts[0] || today.getDate();
-      const m = parts[1] || (today.getMonth() + 1);
-      const y = parts[2] || today.getFullYear();
-      fechaLarga = `${d} de ${months[m - 1] || "agosto"} del ${y}`;
-    } else if (cleanFecha && cleanFecha !== "undefined" && !cleanFecha.includes("undefined")) {
-      fechaLarga = cleanFecha;
-    }
-
     const numTramite = data.numeroTramite || data.numero_tramite || data.tramiteNumero || "00";
-    const totalAprobadosVal = data.totalAprobados ?? data.total_aprobados ?? cantidadNum;
-    const totalReprobadosVal = data.totalReprobados ?? data.total_reprobados ?? 0;
 
-    const matIniRaw = targetCourse.inicioMatricula || data.inicioMatricula || data.matriculaInicio || data.fechaMatriculaInicio || targetCourse.inicioCurso || "13/07/2026";
-    const matFinRaw = targetCourse.finMatricula || data.finMatricula || data.matriculaFin || data.fechaMatriculaFin || targetCourse.finCurso || "21/07/2026";
-
-    const templateData = {
-      ...data,
-      fechaOficioMatriz: data.fechaOficioMatriz || fechaLarga,
-      fechaEmision: fechaLarga,
-      fechaActual: fechaLarga,
-      oficioNumero: data.oficio_numero || data.oficioNumero || `2026-1163`,
-      oficio_numero: data.oficio_numero || data.oficioNumero || `2026-1163`,
+    const templateData = this.buildUniversalTemplateData({
+      course: targetCourse,
+      students: studentsList,
+      oficioNumero: data.oficio_numero || data.oficioNumero || "2026-1163",
       numeroTramite: numTramite,
-      numero_tramite: numTramite,
-      tramiteNumero: numTramite,
-      numeroTramiteIngreso: numTramite,
-      cantidadEstudiantes: cantidadNum,
-      cantidadEstudiantesTexto: cantidadTexto,
-      cantidadEstudiantesPalabras: cantidadTexto,
-      totalAprobados: totalAprobadosVal,
-      total_aprobados: totalAprobadosVal,
-      totalReprobados: totalReprobadosVal,
-      total_reprobados: totalReprobadosVal,
-      matriculaInicio: this.formatDateShortSlash(matIniRaw),
-      matriculaFin: this.formatDateShortSlash(matFinRaw),
-      inicioMatriculas: this.formatDateShortSlash(matIniRaw),
-      finMatriculas: this.formatDateShortSlash(matFinRaw),
-      finMatriculasLargo: this.formatDateFullSpanish(matFinRaw),
-      resolucionAnt: storeConfig.escuela?.resolucion || "18 DCTS-ANT-2013",
-      resolucion: storeConfig.escuela?.resolucion || "18 DCTS-ANT-2013",
-      cursoNombre: targetCourse.nombre || data.cursoNombre || data.curso || data.courseName || data.course?.nombre || "DAIC 020 2026",
-      tipoLicencia: targetCourse.tipoLicencia || data.tipoLicencia || data.course?.tipoLicencia || "B",
-      estudiantes: mappedStudents,
-      ...mappedStudents[0],
-    };
+      totalAprobados: data.totalAprobados ?? data.total_aprobados,
+      totalReprobados: data.totalReprobados ?? data.total_reprobados,
+      fechaOficioMatriz: data.fechaOficioMatriz,
+      additionalData: data,
+    });
 
     try {
       return await this.renderDocxTemplate("Fase 3/OficioLegalizacion.docx", templateData, outputPath, true);
@@ -1365,44 +1551,11 @@ export class WordGenerator {
 
     const studentsList = sourceStudents.length > 0 ? sourceStudents : (data.students || data.estudiantes || [data]);
 
-    // Fechas y horarios formateados para el curso
-    const mInicio = this.formatDateExcel(targetCourse.inicioMatriculas || data.matriculaInicio || data.fechaMatriculaInicio || data.inicioMatriculas, "13/07/2026");
-    const mFin = this.formatDateExcel(targetCourse.finMatriculas || data.matriculaFin || data.fechaMatriculaFin || data.finMatriculas, "21/07/2026");
-    const cInicio = this.formatDateExcel(targetCourse.inicioCurso || data.cursoInicio || data.fechaCursoInicio || data.inicioCurso, "27/07/2026");
-    const cFin = this.formatDateExcel(targetCourse.finCurso || data.cursoFin || data.fechaCursoFin || data.finCurso, "04/08/2026");
-
-    const hPractico = data.horarioPractico || data.horarioPractica || targetCourse.horarioPractica || "14H00-16H00";
-    const hTeorico = this.cleanHorarioTeoria(data.horarioTeorico || data.horarioTeoria || targetCourse.horarioTeoria || "18H00-20H00");
-
-    const mappedStudents = this.mapAndSortStudents(studentsList, data, targetCourse, storeConfig);
-
-    const todayIso = new Date().toISOString().split("T")[0];
-    const fechaActualHoy = this.formatDateLong(todayIso);
-
-    const templateData = {
-      ...data,
-      resolucionAnt: storeConfig.escuela?.resolucion || "18 DCTS-ANT-2013",
-      resolucion: storeConfig.escuela?.resolucion || "18 DCTS-ANT-2013",
-      cursoNombre: targetCourse.nombre || data.cursoNombre || data.curso || data.courseName || data.course?.nombre || "DAIC 020 2026",
-      tipoLicencia: targetCourse.tipoLicencia || data.tipoLicencia || data.course?.tipoLicencia || "B",
-      matriculaInicio: mInicio,
-      matriculaFin: mFin,
-      fechaMatriculaInicio: mInicio,
-      fechaMatriculaFin: mFin,
-      cursoInicio: cInicio,
-      cursoFin: cFin,
-      fechaCursoInicio: cInicio,
-      fechaCursoFin: cFin,
-      horarioPractico: hPractico,
-      horarioPractica: hPractico,
-      horarioTeorico: hTeorico,
-      horarioTeoria: hTeorico,
-      fechaActual: fechaActualHoy,
-      fechaHoy: fechaActualHoy,
-      fechaSistema: fechaActualHoy,
-      estudiantes: mappedStudents,
-      ...mappedStudents[0],
-    };
+    const templateData = this.buildUniversalTemplateData({
+      course: targetCourse,
+      students: studentsList,
+      additionalData: data,
+    });
 
     return this.renderDocxTemplate("Fase 2/AcuerdoDeEnsenanza.docx", templateData, outputPath);
   }
@@ -1467,7 +1620,6 @@ export class WordGenerator {
   public async generateFichaTeorica(data: any, outputPath: string): Promise<string> {
     console.log("[WordGenerator] Generando Ficha Teórica a partir de plantilla oficial Fase 2/FICHA TEORIA.docx...", outputPath);
 
-    const storeConfig = useApp.getState().config;
     const storeCursos = useApp.getState().cursos || [];
     const storeEstudiantes = useApp.getState().estudiantes || [];
 
@@ -1478,15 +1630,7 @@ export class WordGenerator {
       (c: any) => (targetCourseId && c.id === targetCourseId) || (targetCourseName && (c.nombre === targetCourseName || c.nombre.includes(targetCourseName)))
     ) || data.course || {};
 
-    // Instructores teóricos desde storeConfig.instructores
-    const insts = storeConfig.instructores || [];
-    const edVialInst = insts.find((i: any) => /vial/i.test(i.materiaTeorica || ""))?.nombre || (storeConfig.firmas as any)?.teoricos?.edVial || "Francisco Ortuño";
-    const mecanicaInst = insts.find((i: any) => /mec/i.test(i.materiaTeorica || ""))?.nombre || (storeConfig.firmas as any)?.teoricos?.mecanica || "Mario Peralvo";
-    const pAuxiliosInst = insts.find((i: any) => /auxilio/i.test(i.materiaTeorica || ""))?.nombre || (storeConfig.firmas as any)?.teoricos?.pAuxilios || "Dr. Rafael Parra";
-    const psicologiaInst = insts.find((i: any) => /psico/i.test(i.materiaTeorica || ""))?.nombre || (storeConfig.firmas as any)?.teoricos?.psicologia || "Luis De La Torre";
-
     let sourceStudents: any[] = [];
-
     if (Array.isArray(data.students) && data.students.length > 0) {
       sourceStudents = data.students;
     } else if (Array.isArray(data.estudiantes) && data.estudiantes.length > 0) {
@@ -1505,52 +1649,11 @@ export class WordGenerator {
 
     const studentsList = sourceStudents.length > 0 ? sourceStudents : (data.students || data.estudiantes || [data]);
 
-    // Fechas y horarios formateados para el curso
-    const mInicio = this.formatDateExcel(targetCourse.inicioMatriculas || data.matriculaInicio || data.fechaMatriculaInicio || data.inicioMatriculas, "13/07/2026");
-    const mFin = this.formatDateExcel(targetCourse.finMatriculas || data.matriculaFin || data.fechaMatriculaFin || data.finMatriculas, "21/07/2026");
-    const cInicio = this.formatDateExcel(targetCourse.inicioCurso || data.cursoInicio || data.fechaCursoInicio || data.inicioCurso, "27/07/2026");
-    const cFin = this.formatDateExcel(targetCourse.finCurso || data.cursoFin || data.fechaCursoFin || data.finCurso, "04/08/2026");
-
-    const hPracticoRaw = data.horarioPractico || data.horarioPractica || targetCourse.horarioPractica || "14H00-16H00";
-    const hTeoricoRaw = data.horarioTeorico || data.horarioTeoria || targetCourse.horarioTeoria || "18H00-20H00";
-    const hPractico = String(hPracticoRaw).split("|")[0]!.trim();
-    const hTeorico = this.cleanHorarioTeoria(String(hTeoricoRaw).split("|")[0]!.trim());
-
-    const mappedStudents = this.mapAndSortStudents(studentsList, data, targetCourse, storeConfig);
-
-    const templateData = {
-      ...data,
-      resolucionAnt: storeConfig.escuela?.resolucion || "18 DCTS-ANT-2013",
-      resolucion: storeConfig.escuela?.resolucion || "18 DCTS-ANT-2013",
-      cursoNombre: targetCourse.nombre || data.cursoNombre || data.curso || data.courseName || data.course?.nombre || "DAIC 020 2026",
-      tipoLicencia: targetCourse.tipoLicencia || data.tipoLicencia || data.course?.tipoLicencia || "B",
-      matriculaInicio: mInicio,
-      matriculaFin: mFin,
-      fechaMatriculaInicio: mInicio,
-      fechaMatriculaFin: mFin,
-      matriculaStart: mInicio,
-      matriculaEnd: mFin,
-      cursoInicio: cInicio,
-      cursoFin: cFin,
-      fechaCursoInicio: cInicio,
-      fechaCursoFin: cFin,
-      cursoStart: cInicio,
-      cursoEnd: cFin,
-      horarioPractico: hPractico,
-      horarioPractica: hPractico,
-      horarioTeorico: hTeorico,
-      horarioTeoria: hTeorico,
-      instructorEdVial: data.instructorEdVial || edVialInst,
-      instructorMecanica: data.instructorMecanica || mecanicaInst,
-      instructorPAuxilios: data.instructorPAuxilios || pAuxiliosInst,
-      instructorPsicologia: data.instructorPsicologia || psicologiaInst,
-      instEdVial: data.instructorEdVial || edVialInst,
-      instMecanica: data.instructorMecanica || mecanicaInst,
-      instPAuxilios: data.instructorPAuxilios || pAuxiliosInst,
-      instPsicologia: data.instructorPsicologia || psicologiaInst,
-      estudiantes: mappedStudents,
-      ...mappedStudents[0],
-    };
+    const templateData = this.buildUniversalTemplateData({
+      course: targetCourse,
+      students: studentsList,
+      additionalData: data,
+    });
 
     return this.renderDocxTemplate("Fase 2/FichaTeorica.docx", templateData, outputPath);
   }
@@ -1559,7 +1662,6 @@ export class WordGenerator {
   public async generateActaParte1(data: any, outputPath: string): Promise<string> {
     console.log("[WordGenerator] Generando Parte 1 Acta de Calificaciones a partir de plantilla oficial Fase 2/PARTE 1 ACTA DE CALIFICACIONES.docx...", outputPath);
 
-    const storeConfig = useApp.getState().config;
     const storeCursos = useApp.getState().cursos || [];
     const storeEstudiantes = useApp.getState().estudiantes || [];
 
@@ -1571,7 +1673,6 @@ export class WordGenerator {
     ) || data.course || {};
 
     let sourceStudents: any[] = [];
-
     if (Array.isArray(data.students) && data.students.length > 0) {
       sourceStudents = data.students;
     } else if (Array.isArray(data.estudiantes) && data.estudiantes.length > 0) {
@@ -1589,45 +1690,18 @@ export class WordGenerator {
     }
 
     const studentsList = sourceStudents.length > 0 ? sourceStudents : (data.students || data.estudiantes || [data]);
+    const storeConfig = useApp.getState().config;
+    const actaBaseNum = Number(storeConfig.secuenciales?.actas) || 3251;
 
-    // Fechas y horarios formateados para el curso
-    const mInicio = this.formatDateExcel(targetCourse.inicioMatriculas || data.matriculaInicio || data.fechaMatriculaInicio || data.inicioMatriculas, "13/07/2026");
-    const mFin = this.formatDateExcel(targetCourse.finMatriculas || data.matriculaFin || data.fechaMatriculaFin || data.finMatriculas, "21/07/2026");
-    const cInicio = this.formatDateExcel(targetCourse.inicioCurso || data.cursoInicio || data.fechaCursoInicio || data.inicioCurso, "27/07/2026");
-    const cFin = this.formatDateExcel(targetCourse.finCurso || data.cursoFin || data.fechaCursoFin || data.finCurso, "04/08/2026");
-
-    const hPractico = data.horarioPractico || data.horarioPractica || targetCourse.horarioPractica || "14H00-16H00";
-    const hTeorico = this.cleanHorarioTeoria(data.horarioTeorico || data.horarioTeoria || targetCourse.horarioTeoria || "18H00-20H00");
-
-    const mappedStudents = this.mapAndSortStudents(studentsList, data, targetCourse, storeConfig);
-
-    const todayIso = new Date().toISOString().split("T")[0];
-    const fechaActualHoy = this.formatDateLong(todayIso);
-
-    const templateData = {
-      ...data,
-      resolucionAnt: storeConfig.escuela?.resolucion || "18 DCTS-ANT-2013",
-      resolucion: storeConfig.escuela?.resolucion || "18 DCTS-ANT-2013",
-      cursoNombre: targetCourse.nombre || data.cursoNombre || data.curso || data.courseName || data.course?.nombre || "DAIC 020 2026",
-      tipoLicencia: targetCourse.tipoLicencia || data.tipoLicencia || data.course?.tipoLicencia || "B",
-      matriculaInicio: mInicio,
-      matriculaFin: mFin,
-      fechaMatriculaInicio: mInicio,
-      fechaMatriculaFin: mFin,
-      cursoInicio: cInicio,
-      cursoFin: cFin,
-      fechaCursoInicio: cInicio,
-      fechaCursoFin: cFin,
-      horarioPractico: hPractico,
-      horarioPractica: hPractico,
-      horarioTeorico: hTeorico,
-      horarioTeoria: hTeorico,
-      fechaActual: fechaActualHoy,
-      fechaHoy: fechaActualHoy,
-      fechaSistema: fechaActualHoy,
-      estudiantes: mappedStudents,
-      ...mappedStudents[0],
-    };
+    const templateData = this.buildUniversalTemplateData({
+      course: targetCourse,
+      students: studentsList,
+      additionalData: {
+        ...data,
+        actaInicio: actaBaseNum,
+        numeroActa: actaBaseNum,
+      },
+    });
 
     return this.renderDocxTemplate("Fase 2/ActaParte1.docx", templateData, outputPath);
   }
@@ -1636,7 +1710,6 @@ export class WordGenerator {
   public async generateActaParte2(data: any, outputPath: string): Promise<string> {
     console.log("[WordGenerator] Rellenando plantilla oficial docxtemplater: Fase 4/PARTE 2 ACTA DE CALIFICACIONES.docx ->", outputPath);
 
-    const storeConfig = useApp.getState().config;
     const storeCursos = useApp.getState().cursos || [];
     const storeEstudiantes = useApp.getState().estudiantes || [];
 
@@ -1665,24 +1738,11 @@ export class WordGenerator {
 
     const rawList = sourceStudents.length > 0 ? sourceStudents : (data.students || data.estudiantes || [data]);
 
-    const mappedStudents = this.mapAndSortStudents(rawList, data, targetCourse, storeConfig);
-
-    const spanishNumbers: Record<number, string> = {
-      1: "UN", 2: "DOS", 3: "TRES", 4: "CUATRO", 5: "CINCO", 6: "SEIS", 7: "SIETE", 8: "OCHO", 9: "NUEVE", 10: "DIEZ",
-      11: "ONCE", 12: "DOCE", 13: "TRECE", 14: "CATORCE", 15: "QUINCE", 16: "DIECISÉIS", 17: "DIECISIETE", 18: "DIECIOCHO",
-      19: "DIECINUEVE", 20: "VEINTE", 21: "VEINTIUNO", 22: "VEINTIDÓS", 23: "VEINTITRÉS", 24: "VEINTICUATRO", 25: "VEINTICINCO"
-    };
-
-    const templateData = {
-      ...data,
-      cursoNombre: targetCourse.nombre || targetCourseName,
-      tipoLicencia: targetCourse.tipoLicencia || "B",
-      cursoInicio: this.formatDateExcel(targetCourse.inicioCurso, "27/07/2026"),
-      cursoFin: this.formatDateExcel(targetCourse.finCurso, "04/08/2026"),
-      cantidadEstudiantes: mappedStudents.length,
-      cantidadEstudiantesTexto: spanishNumbers[mappedStudents.length] || String(mappedStudents.length),
-      estudiantes: mappedStudents,
-    };
+    const templateData = this.buildUniversalTemplateData({
+      course: targetCourse,
+      students: rawList,
+      additionalData: data,
+    });
 
     return this.renderDocxTemplate("Fase 4/ActaParte2.docx", templateData, outputPath);
   }
@@ -1839,9 +1899,6 @@ export class WordGenerator {
     });
 
     const studentsList = studentsWithGrades.length > 0 ? studentsWithGrades : [data];
-    const mappedStudents = this.mapAndSortStudents(studentsList, data, targetCourse, storeConfig);
-
-    const firstSt = mappedStudents[0] || {};
     const rawCInicio = targetCourse.inicioCurso || data.cursoInicio || data.fechaCursoInicio || data.inicioCurso;
     const rawCFin = targetCourse.finCurso || data.cursoFin || data.fechaCursoFin || data.finCurso;
     const cInicioLargo = this.formatDateLongSpanishCapital(rawCInicio);
@@ -1850,24 +1907,22 @@ export class WordGenerator {
     const todayIso = new Date().toISOString().split("T")[0];
     const fechaMatrizLarga = this.formatDateLongSpanishCapital(data.fechaOficioMatriz || data.fechaActual || todayIso);
 
-    const templateData = {
-      ...data,
-      cursoNombre: targetCourse.nombre || targetCourseName,
-      tipoLicencia: targetCourse.tipoLicencia || "B",
-      cursoInicio: cInicioLargo,
-      cursoFin: cFinLargo,
-      fechaCursoInicio: cInicioLargo,
-      fechaCursoFin: cFinLargo,
+    const templateData = this.buildUniversalTemplateData({
+      course: targetCourse,
+      students: studentsList,
       fechaOficioMatriz: fechaMatrizLarga,
-      fechaActual: fechaMatrizLarga,
-      fechaHoy: fechaMatrizLarga,
-      fechaSistema: fechaMatrizLarga,
-      estudiantes: mappedStudents,
-      ...firstSt,
-      estudianteNombre: firstSt.fullName || firstSt.nombres || firstSt.nombre || "ESTUDIANTE EJEMPLO",
-      notaTeoria: firstSt.notaPromedio || firstSt.promedioTeorico || firstSt.promedio || "17,00",
-      notaPractica: firstSt.notaPractica || firstSt.practica || firstSt.examenPractico || "17,00",
-    };
+      additionalData: {
+        ...data,
+        cursoInicio: cInicioLargo,
+        cursoFin: cFinLargo,
+        fechaCursoInicio: cInicioLargo,
+        fechaCursoFin: cFinLargo,
+        fechaOficioMatriz: fechaMatrizLarga,
+        fechaActual: fechaMatrizLarga,
+        fechaHoy: fechaMatrizLarga,
+        fechaSistema: fechaMatrizLarga,
+      },
+    });
 
     return this.renderDocxTemplate("Fase 4/Titulos.docx", templateData, outputPath);
   }
