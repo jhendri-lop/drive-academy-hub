@@ -9,6 +9,7 @@ import {
   PenLine,
   Users,
   Terminal,
+  FolderOpen,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useApp } from "@/lib/store";
@@ -26,6 +27,7 @@ import { DirectivaConfig } from "@/components/DirectivaConfig";
 import { Sliders } from "lucide-react";
 
 import { SQLiteClient } from "@/infrastructure/database/SQLiteClient";
+import { TemplateStorage } from "@/infrastructure/storage/TemplateStorage";
 
 type Seccion =
   | "Datos Escuela"
@@ -142,9 +144,25 @@ export default function ConfiguracionPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Configuración</h1>
-        <p className="text-[12px] text-muted-foreground">Parámetros generales del sistema</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Configuración</h1>
+          <p className="text-[12px] text-muted-foreground">Parámetros generales del sistema</p>
+        </div>
+        <button
+          onClick={async () => {
+            try {
+              await TemplateStorage.getInstance().openTemplatesFolder();
+              toast.success("Carpeta de plantillas editables abierta en el explorador");
+            } catch (e) {
+              toast.error("No se pudo abrir la carpeta de plantillas");
+            }
+          }}
+          className="inline-flex items-center gap-2 rounded-lg bg-blue-600/10 border border-blue-500/20 px-4 py-2 text-xs font-semibold text-blue-400 hover:bg-blue-600/20 transition-all shadow-sm"
+        >
+          <FolderOpen className="w-4 h-4 text-blue-500" />
+          <span>Abrir Carpeta de Plantillas Editables</span>
+        </button>
       </div>
 
       <div className="grid grid-cols-4 gap-4">

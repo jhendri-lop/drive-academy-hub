@@ -11,13 +11,23 @@ import ConfiguracionPage from "@/routes/configuracion";
 
 import { useEffect, useState } from "react";
 import { SQLiteClient } from "@/infrastructure/database/SQLiteClient";
-
+import { TemplateStorage } from "@/infrastructure/storage/TemplateStorage";
+import { validarLicenciaOffline } from "@/infrastructure/auth/validarLicenciaOffline";
+import { LoginScreen } from "@/routes/LoginScreen";
+import { LicenseLockScreen } from "@/routes/LicenseLockScreen";
 import { useApp } from "@/lib/store";
 
 function AppLayout() {
   const [ready, setReady] = useState(false);
   const theme = useApp((s) => s.theme);
   const palette = useApp((s) => s.palette);
+  const sesion = useApp((s) => s.sesion);
+
+  const [licenseStatus, setLicenseStatus] = useState<{ checked: boolean; valid: boolean; message: string }>({
+    checked: false,
+    valid: true,
+    message: "",
+  });
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
@@ -28,14 +38,31 @@ function AppLayout() {
   }, [theme, palette]);
 
   useEffect(() => {
-    SQLiteClient.getInstance()
-      .init()
+    // Inicializar SQLite DB y copiar plantillas editables por defecto
+    Promise.all([
+      SQLiteClient.getInstance().init(),
+      TemplateStorage.getInstance().copyDefaultTemplates(),
+    ])
       .then(() => setReady(true))
       .catch((err) => {
-        console.error("Error al iniciar base de datos SQLite:", err);
-        setReady(true); // Fallback para abrir UI incluso en modo desarrollo web
+        console.error("Error al iniciar recursos locales:", err);
+        setReady(true);
       });
   }, []);
+
+  useEffect(() => {
+    if (sesion?.escuelaId) {
+      validarLicenciaOffline(sesion.escuelaId).then((res) => {
+        setLicenseStatus({
+          checked: true,
+          valid: res.valida,
+          message: res.mensaje,
+        });
+      });
+    } else {
+      setLicenseStatus({ checked: true, valid: false, message: "" });
+    }
+  }, [sesion]);
 
   if (!ready) {
     return (
@@ -46,6 +73,26 @@ function AppLayout() {
         </div>
       </div>
     );
+  }
+
+  if (!sesion) {
+    return (
+      <LoginScreen
+        onSuccess={() => {
+          const currentSesion = useApp.getState().sesion;
+          if (currentSesion?.escuelaId) {
+            validarLicenciaOffline(currentSesion.escuelaId).then((res) => {
+              setLicenseStatus({ checked: true, valid: res.valida, message: res.mensaje });
+            });
+          }
+        }}
+        onLicenseExpired={(msg) => setLicenseStatus({ checked: true, valid: false, message: msg })}
+      />
+    );
+  }
+
+  if (licenseStatus.checked && !licenseStatus.valid) {
+    return <LicenseLockScreen mensaje={licenseStatus.message} />;
   }
 
   return (

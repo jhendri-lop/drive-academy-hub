@@ -51,18 +51,30 @@ const cursosDemo: Curso[] = [];
 const estudiantesDemo: Estudiante[] = [];
 const recibosDemo: Recibo[] = [];
 
+export interface Sesion {
+  email: string;
+  escuelaId: string;
+  nombre: string;
+  accessToken?: string;
+  plan: string;
+  fechaExpiracion: string;
+}
+
 export type Palette = "azul" | "verde" | "naranja" | "rojo";
 
 interface AppState {
   theme: "dark" | "light";
   palette: Palette;
   usuario: string;
+  sesion: Sesion | null;
   cursos: Curso[];
   estudiantes: Estudiante[];
   recibos: Recibo[];
   config: Config;
   setTheme: (t: "dark" | "light") => void;
   setPalette: (p: Palette) => void;
+  setSesion: (s: Sesion | null) => void;
+  logout: () => void;
   addCurso: (c: Omit<Curso, "id">) => void;
   updateCurso: (id: string, c: Partial<Curso>) => void;
   deleteCurso: (id: string) => void;
@@ -80,12 +92,15 @@ export const useApp = create<AppState>()(
       theme: "dark",
       palette: "azul",
       usuario: "Andrea Suárez",
+      sesion: null,
       cursos: cursosDemo,
       estudiantes: estudiantesDemo,
       recibos: recibosDemo,
       config: defaultConfig,
       setTheme: (theme) => set({ theme }),
       setPalette: (palette) => set({ palette }),
+      setSesion: (sesion) => set({ sesion }),
+      logout: () => set({ sesion: null }),
       addCurso: (c) => {
         const id = crypto.randomUUID();
         const nuevoCurso = { ...c, id };

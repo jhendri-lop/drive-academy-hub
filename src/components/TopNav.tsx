@@ -1,5 +1,5 @@
 import { Link, NavLink } from "react-router-dom";
-import { CalendarDays, GraduationCap, LayoutDashboard, Settings, Wallet } from "lucide-react";
+import { CalendarDays, GraduationCap, LayoutDashboard, Settings, Wallet, LogOut } from "lucide-react";
 import { useApp } from "@/lib/store";
 import { ColorPicker, ThemeToggle } from "./ui-kit/Theme";
 
@@ -12,6 +12,9 @@ const links = [
 
 export function TopNav() {
   const escuela = useApp((s) => s.config.escuela);
+  const logout = useApp((s) => s.logout);
+  const sesion = useApp((s) => s.sesion);
+
   const fecha = new Date().toLocaleDateString("es-EC", {
     weekday: "long",
     day: "2-digit",
@@ -50,10 +53,22 @@ export function TopNav() {
         <div className="ml-auto flex items-center gap-3">
           <ColorPicker compact />
           <ThemeToggle />
-          <div className="border-l pl-3 text-right leading-tight">
-            <p className="flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
-              <CalendarDays size={11} /> {fecha}
-            </p>
+          <div className="border-l pl-3 text-right leading-tight flex items-center gap-3">
+            <div>
+              <p className="flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
+                <CalendarDays size={11} /> {fecha}
+              </p>
+              {sesion?.email && (
+                <p className="text-[10px] text-primary/80 font-mono text-right">{sesion.email}</p>
+              )}
+            </div>
+            <button
+              onClick={() => logout()}
+              title="Cerrar Sesión"
+              className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+            >
+              <LogOut size={16} />
+            </button>
           </div>
         </div>
       </div>

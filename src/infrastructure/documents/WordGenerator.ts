@@ -16,6 +16,7 @@ import {
   ImportedXmlComponent,
 } from "docx";
 import { LocalFileStorage } from "../storage/LocalFileStorage";
+import { TemplateStorage } from "../storage/TemplateStorage";
 import { SQLiteClient } from "../database/SQLiteClient";
 import { useApp } from "@/lib/store";
 import { ANT_LOGO_BASE64 } from "./antLogoBase64";
@@ -765,39 +766,12 @@ export class WordGenerator {
     const cleanPath = templateRelativePath.replace(/^\/+/, "");
     let arrayBuffer: ArrayBuffer | null = null;
 
-    // 1. LECTURA DIRECTA EN DISCO DURO EN TIEMPO REAL (Primera prioridad)
+    // 1. CARGA DESDE LA CARPETA DE PLANTILLAS EDITABLES DE APPDATA (Con fallback empaquetado)
     try {
-      const diskBytes = await LocalFileStorage.getInstance().readFile(`public/templates/${cleanPath}`);
-      if (diskBytes && diskBytes.length > 0) {
-        arrayBuffer = diskBytes.buffer as ArrayBuffer;
-        console.log(`[WordGenerator] LECTURA DIRECTA EN TIEMPO REAL DESDE DISCO: 'public/templates/${cleanPath}'`);
-      }
+      arrayBuffer = await TemplateStorage.getInstance().getTemplateArrayBuffer(cleanPath);
+      console.log(`[WordGenerator] Plantilla '${cleanPath}' cargada exitosamente vía TemplateStorage.`);
     } catch (err) {
-      console.warn(`[WordGenerator] Lectura directa en disco no disponible:`, err);
-    }
-
-    // 2. LECTURA DIRECTA EN TIEMPO REAL VÍA FETCH SIN CACHÉ (Segunda prioridad)
-    if (!arrayBuffer) {
-      const encodedSegments = cleanPath.split("/").map((part) => encodeURIComponent(part)).join("/");
-      const possibleUrls = [
-        `/templates/${encodedSegments}`,
-        `/templates/${cleanPath}`,
-        `./templates/${encodedSegments}`,
-        `templates/${cleanPath}`,
-      ];
-
-      for (const url of possibleUrls) {
-        try {
-          const res = await fetch(`${url}?t=${Date.now()}`);
-          if (res.ok) {
-            arrayBuffer = await res.arrayBuffer();
-            console.log(`[WordGenerator] LECTURA DIRECTA EN TIEMPO REAL VÍA DEV SERVER: '${url}'`);
-            break;
-          }
-        } catch {
-          // Continuar intentando
-        }
-      }
+      console.warn(`[WordGenerator] Error al cargar plantilla vía TemplateStorage:`, err);
     }
 
     if (!arrayBuffer) {
