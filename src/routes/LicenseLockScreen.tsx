@@ -1,25 +1,27 @@
 import React from "react";
-import { ShieldAlert, ExternalLink, Power } from "lucide-react";
+import { ShieldAlert, ExternalLink, LogOut } from "lucide-react";
+import { useApp } from "@/lib/store";
 
 interface LicenseLockScreenProps {
   mensaje?: string;
 }
 
 export const LicenseLockScreen: React.FC<LicenseLockScreenProps> = ({ mensaje }) => {
+  const logout = useApp((s) => s.logout);
+
   const handleRenovar = () => {
-    window.open("https://zentriumph.com", "_blank");
+    const url = "https://zentriumph.com";
+    const link = document.createElement("a");
+    link.href = url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  const handleCerrar = () => {
-    try {
-      if (typeof window !== "undefined" && (window as any).__TAURI__) {
-        (window as any).__TAURI__.process?.exit(0);
-      } else {
-        window.close();
-      }
-    } catch {
-      window.close();
-    }
+  const handleCerrarSesion = () => {
+    logout();
   };
 
   return (
@@ -50,18 +52,18 @@ export const LicenseLockScreen: React.FC<LicenseLockScreenProps> = ({ mensaje })
         <div className="space-y-4">
           <button
             onClick={handleRenovar}
-            className="w-full bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-orange-500/30 transition-all flex items-center justify-center gap-2 text-base"
+            className="w-full bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-orange-500/30 transition-all flex items-center justify-center gap-2 text-base cursor-pointer"
           >
             <span>Renovar Ahora</span>
             <ExternalLink className="w-5 h-5" />
           </button>
 
           <button
-            onClick={handleCerrar}
-            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2 text-sm border border-slate-700"
+            onClick={handleCerrarSesion}
+            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2 text-sm border border-slate-700 cursor-pointer"
           >
-            <Power className="w-4 h-4 text-slate-400" />
-            <span>Cerrar Aplicación</span>
+            <LogOut className="w-4 h-4 text-slate-400" />
+            <span>Cerrar Sesión / Volver al Inicio</span>
           </button>
         </div>
       </div>
