@@ -8,54 +8,65 @@ export interface ResultadoLicencia {
   fechaExpiracion?: string;
 }
 
-export async function validarLicenciaOffline(escuelaId: string): Promise<ResultadoLicencia> {
+export async function validarLicenciaOffline(
+  escuelaId: string,
+  escuelaData?: { estado: string; fechaExpiracion: string; plan: string }
+): Promise<ResultadoLicencia> {
   const LAST_CHECK_KEY = "zentriumph_last_check";
 
-  try {
-    const validator = LicenseValidator.getInstance();
-    const result = await validator.validateLicense(escuelaId);
+  // Intentar recuperar datos guardados en localStorage si no vienen en la llamada
+  if (!escuelaData) {
+    const savedEscuela = localStorage.getItem("zentriumph_escuela_data");
+    if (savedEscuela) {
+      try {
+        escuelaData = JSON.parse(savedEscuela);
+      } catch (e) {
+        console.warn("[Validar] Error leyendo escuela guardada:", e);
+      }
+    }
+  }
 
-    if (result.valid) {
-      localStorage.setItem(LAST_CHECK_KEY, new Date().toISOString());
-      return {
-        valida: true,
-        mensaje: result.message,
-        plan: result.token?.status || "Activo",
-        fechaExpiracion: result.token?.validUntil,
-      };
-    } else {
+  console.log("[DEBUG Validar] escuelaData recibido/recuperado:", escuelaData);
+
+  // Si tenemos los datos de la escuela (desde LoginScreen/RPC o localStorage), validar directamente
+  if (escuelaData && escuelaData.estado && escuelaData.fechaExpiracion) {
+    const fechaExp = new Date(escuelaData.fechaExpiracion);
+    const ahora = new Date();
+
+    console.log("[DEBUG Validar] fechaExp:", fechaExp, "| ahora:", ahora);
+    console.log("[DEBUG Validar] fechaExp < ahora?", fechaExp < ahora);
+    console.log("[DEBUG Validar] estado:", escuelaData.estado, "| es activa?", escuelaData.estado === "activa");
+
+    if (escuelaData.estado !== "activa") {
       return {
         valida: false,
-        mensaje: result.message,
+        mensaje: "Licencia no activa. Estado actual: " + escuelaData.estado,
       };
     }
-  } catch {
-    // Si falla la conexión a internet (Modo Offline)
-    const lastCheck = localStorage.getItem(LAST_CHECK_KEY);
-    if (!lastCheck) {
+
+    if (fechaExp < ahora) {
       return {
         valida: false,
-        mensaje: "Primera vez requiere conexión a internet para validar la licencia.",
+        mensaje: "Licencia expirada el " + fechaExp.toLocaleDateString(),
       };
     }
 
-    const lastCheckDate = new Date(lastCheck).getTime();
-    const now = new Date().getTime();
-    const diffTime = Math.abs(now - lastCheckDate);
-    const diasDesdeCheck = diffTime / (1000 * 60 * 60 * 24);
+    const diasRestantes = Math.ceil((fechaExp.getTime() - ahora.getTime()) / (1000 * 60 * 60 * 24));
 
-    if (diasDesdeCheck <= 7) {
-      const diasRestantes = Math.max(0, Math.floor(7 - diasDesdeCheck));
-      return {
-        valida: true,
-        mensaje: `Modo offline activo (${diasRestantes} días de gracia restantes).`,
-        dias_restantes: diasRestantes,
-      };
-    }
+    localStorage.setItem(LAST_CHECK_KEY, new Date().toISOString());
 
     return {
-      valida: false,
-      mensaje: "Período de gracia sin conexión expirado (más de 7 días sin validar online). Conéctate a internet para continuar.",
+      valida: true,
+      mensaje: "Licencia válida",
+      plan: escuelaData.plan,
+      dias_restantes: diasRestantes,
+      fechaExpiracion: escuelaData.fechaExpiracion,
     };
   }
+
+  // Si no hay datos de escuela disponibles, solicitar inicio de sesión en lugar de caer en error 404
+  return {
+    valida: false,
+    mensaje: "No se encontraron datos de licencia. Inicia sesión de nuevo.",
+  };
 }

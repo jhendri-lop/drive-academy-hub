@@ -16,6 +16,7 @@ import { validarLicenciaOffline } from "@/infrastructure/auth/validarLicenciaOff
 import { LoginScreen } from "@/routes/LoginScreen";
 import { LicenseLockScreen } from "@/routes/LicenseLockScreen";
 import { useApp } from "@/lib/store";
+import { supabase } from "@/lib/supabase";
 
 function AppLayout() {
   const [ready, setReady] = useState(false);
@@ -52,7 +53,11 @@ function AppLayout() {
 
   useEffect(() => {
     if (sesion?.escuelaId) {
-      validarLicenciaOffline(sesion.escuelaId).then((res) => {
+      validarLicenciaOffline(sesion.escuelaId, {
+        estado: sesion.estado || "activa",
+        fechaExpiracion: sesion.fechaExpiracion,
+        plan: sesion.plan,
+      }).then((res) => {
         setLicenseStatus({
           checked: true,
           valid: res.valida,
@@ -63,6 +68,53 @@ function AppLayout() {
       setLicenseStatus({ checked: true, valid: false, message: "" });
     }
   }, [sesion]);
+
+  // Heartbeat de validación de licencia en segundo plano cada 30 minutos
+  useEffect(() => {
+    if (!sesion?.escuelaId || !sesion?.email) return;
+
+    const checkHeartbeat = async () => {
+      // Solo verificar si hay conexión a internet
+      if (!navigator.onLine) return;
+
+      try {
+        const { data, error } = await supabase.rpc("obtener_escuela_por_email", {
+          p_email: sesion.email,
+        });
+
+        if (error || !data || data.error) {
+          // Error de conexión o escuela no encontrada temporalmente, ignorar
+          return;
+        }
+
+        const ahora = new Date();
+        const fechaExp = new Date(data.fecha_expiracion);
+
+        // Si el estado cambió a inactiva/suspendida o la fecha expiró
+        if (data.estado !== "activa" || fechaExp < ahora) {
+          useApp.getState().logout();
+          window.location.reload(); // Forzar recarga para redirigir a LoginScreen
+          return;
+        }
+
+        // Si sigue válida, actualizar datos persistidos en localStorage
+        localStorage.setItem(
+          "zentriumph_escuela_data",
+          JSON.stringify({
+            id: data.id,
+            estado: data.estado,
+            fechaExpiracion: data.fecha_expiracion,
+            plan: data.plan,
+          })
+        );
+      } catch (err) {
+        console.warn("[Heartbeat] Error verificando licencia en segundo plano:", err);
+      }
+    };
+
+    const interval = setInterval(checkHeartbeat, 30 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [sesion?.escuelaId, sesion?.email]);
 
   if (!ready) {
     return (
@@ -81,7 +133,11 @@ function AppLayout() {
         onSuccess={() => {
           const currentSesion = useApp.getState().sesion;
           if (currentSesion?.escuelaId) {
-            validarLicenciaOffline(currentSesion.escuelaId).then((res) => {
+            validarLicenciaOffline(currentSesion.escuelaId, {
+              estado: currentSesion.estado || "activa",
+              fechaExpiracion: currentSesion.fechaExpiracion,
+              plan: currentSesion.plan,
+            }).then((res) => {
               setLicenseStatus({ checked: true, valid: res.valida, message: res.mensaje });
             });
           }

@@ -28,35 +28,75 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccess, onLicenseEx
 
     try {
       // 1. Iniciar sesión con Supabase Auth
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password.trim(),
       });
 
-      if (error || !data.session) {
+      if (authError || !authData.user || !authData.session) {
         setErrorMsg("Credenciales incorrectas o usuario no registrado.");
         setLoading(false);
         return;
       }
 
-      // 2. Obtener escuela_id del usuario desde tabla escuelas o metadata
-      let escuelaId = data.user.user_metadata?.escuela_id || data.user.id;
-      try {
-        const { data: escuelaData } = await supabase
-          .from("escuelas")
-          .select("id, plan, fecha_expiracion")
-          .eq("email", email.trim())
-          .maybeSingle();
+      // 2. Buscar escuela asociada al email mediante la función RPC
+      const { data: rpcData, error: rpcError } = await supabase.rpc(
+        "obtener_escuela_por_email",
+        { p_email: email.trim() }
+      );
 
-        if (escuelaData?.id) {
-          escuelaId = escuelaData.id;
-        }
-      } catch {
-        // Usar fallback a ID de usuario
+      if (rpcError) {
+        console.error("[LoginScreen] RPC Error:", rpcError);
+        setErrorMsg("Error al buscar escuela. Intenta de nuevo.");
+        setLoading(false);
+        return;
       }
 
-      // 3. Validar Licencia
-      const resultLicencia = await validarLicenciaOffline(escuelaId);
+      if (!rpcData || rpcData.error || !rpcData.id) {
+        console.error("[LoginScreen] Escuela no encontrada:", rpcData?.error || "Sin datos");
+        setErrorMsg("Usuario autenticado pero escuela no encontrada. Contacta a soporte.");
+        setLoading(false);
+        return;
+      }
+
+      console.log("[DEBUG Login] RPC respuesta:", rpcData);
+
+      // 3. Guardar sesión en Zustand con datos de la escuela obtenidos vía RPC
+      setSesion({
+        email: authData.user.email || email.trim(),
+        escuelaId: rpcData.id,
+        nombre: rpcData.nombre || "Escuela",
+        accessToken: authData.session.access_token,
+        plan: rpcData.plan,
+        estado: rpcData.estado,
+        fechaExpiracion: rpcData.fecha_expiracion,
+      });
+
+      localStorage.setItem(
+        "zentriumph_escuela_data",
+        JSON.stringify({
+          id: rpcData.id,
+          estado: rpcData.estado,
+          fechaExpiracion: rpcData.fecha_expiracion,
+          plan: rpcData.plan,
+        })
+      );
+
+      console.log("[DEBUG Login] Datos para validar:", {
+        id: rpcData.id,
+        estado: rpcData.estado,
+        fecha_expiracion: rpcData.fecha_expiracion,
+        plan: rpcData.plan,
+      });
+
+      // 4. Validar licencia con rpcData.id y datos completos de la escuela
+      const resultLicencia = await validarLicenciaOffline(rpcData.id, {
+        estado: rpcData.estado,
+        fechaExpiracion: rpcData.fecha_expiracion,
+        plan: rpcData.plan,
+      });
+
+      console.log("[DEBUG Login] Resultado licencia:", resultLicencia);
 
       if (!resultLicencia.valida) {
         if (onLicenseExpired) {
@@ -67,16 +107,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccess, onLicenseEx
         setLoading(false);
         return;
       }
-
-      // 4. Guardar sesión en Zustand
-      setSesion({
-        email: data.user.email || email.trim(),
-        escuelaId: escuelaId,
-        nombre: data.user.user_metadata?.full_name || email.split("@")[0] || "Usuario",
-        accessToken: data.session.access_token,
-        plan: resultLicencia.plan || "Activo",
-        fechaExpiracion: resultLicencia.fechaExpiracion || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      });
 
       if (onSuccess) {
         onSuccess();

@@ -9,8 +9,12 @@ interface LicenseLockScreenProps {
 export const LicenseLockScreen: React.FC<LicenseLockScreenProps> = ({ mensaje }) => {
   const logout = useApp((s) => s.logout);
 
+  const sesion = useApp((s) => s.sesion);
+
   const handleRenovar = () => {
-    const url = "https://zentriumph.com";
+    const email = sesion?.email || "";
+    const baseUrl = "https://zentriumph.com/mi-cuenta";
+    const url = email ? `${baseUrl}?email=${encodeURIComponent(email)}` : baseUrl;
     const link = document.createElement("a");
     link.href = url;
     link.target = "_blank";

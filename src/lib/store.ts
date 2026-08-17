@@ -57,6 +57,7 @@ export interface Sesion {
   nombre: string;
   accessToken?: string;
   plan: string;
+  estado?: string;
   fechaExpiracion: string;
 }
 
