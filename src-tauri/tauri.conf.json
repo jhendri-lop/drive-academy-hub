@@ -36,5 +36,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/jhendri-lop/drive-academy-hub/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM4NjZDOEMwMUUzQURCMTYKUldRVzJ6b2V3TWhteU56ejB1RE9PcTNhb0Nkb0ZoMWNLT0ZvZkF1MzVwN29IeWtWMWl3Y2xlc0kK"
+    }
   }
 }

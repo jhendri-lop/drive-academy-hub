@@ -15,13 +15,7 @@ export const LicenseLockScreen: React.FC<LicenseLockScreenProps> = ({ mensaje })
     const email = sesion?.email || "";
     const baseUrl = "https://driveoffice.zentriumph.com/mi-cuenta";
     const url = email ? `${baseUrl}?email=${encodeURIComponent(email)}` : baseUrl;
-    const link = document.createElement("a");
-    link.href = url;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    window.open(url, "_blank");
   };
 
   const handleCerrarSesion = () => {
@@ -55,6 +49,7 @@ export const LicenseLockScreen: React.FC<LicenseLockScreenProps> = ({ mensaje })
         {/* Botones de acción */}
         <div className="space-y-4">
           <button
+            type="button"
             onClick={handleRenovar}
             className="w-full bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-orange-500/30 transition-all flex items-center justify-center gap-2 text-base cursor-pointer"
           >
@@ -63,6 +58,7 @@ export const LicenseLockScreen: React.FC<LicenseLockScreenProps> = ({ mensaje })
           </button>
 
           <button
+            type="button"
             onClick={handleCerrarSesion}
             className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2 text-sm border border-slate-700 cursor-pointer"
           >

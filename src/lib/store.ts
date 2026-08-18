@@ -59,6 +59,7 @@ export interface Sesion {
   plan: string;
   estado?: string;
   fechaExpiracion: string;
+  sessionToken?: string;
 }
 
 export type Palette = "azul" | "verde" | "naranja" | "rojo";
@@ -101,7 +102,21 @@ export const useApp = create<AppState>()(
       setTheme: (theme) => set({ theme }),
       setPalette: (palette) => set({ palette }),
       setSesion: (sesion) => set({ sesion }),
-      logout: () => set({ sesion: null }),
+      logout: () => {
+        const currentSesion = get().sesion;
+        if (currentSesion?.sessionToken) {
+          import("@/lib/supabase").then(async ({ supabase }) => {
+            try {
+              await supabase.rpc("eliminar_sesion", {
+                p_session_token: currentSesion.sessionToken,
+              });
+            } catch (err) {
+              console.warn("[Store] Error eliminando sesión:", err);
+            }
+          });
+        }
+        set({ sesion: null });
+      },
       addCurso: (c) => {
         const id = crypto.randomUUID();
         const nuevoCurso = { ...c, id };

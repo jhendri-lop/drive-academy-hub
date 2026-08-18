@@ -51,6 +51,24 @@ function AppLayout() {
       });
   }, []);
 
+  // Verificación de actualizaciones de la aplicación vía Tauri Auto-Updater
+  useEffect(() => {
+    const checkAppUpdate = async () => {
+      try {
+        const { check } = await import("@tauri-apps/plugin-updater");
+        const update = await check();
+        if (update) {
+          console.log("[Auto-Updater] Nueva versión disponible:", update.version);
+          await update.downloadAndInstall();
+        }
+      } catch (err) {
+        console.warn("[Auto-Updater] No se pudo verificar actualización:", err);
+      }
+    };
+
+    checkAppUpdate();
+  }, []);
+
   useEffect(() => {
     if (sesion?.escuelaId) {
       validarLicenciaOffline(sesion.escuelaId, {
@@ -105,8 +123,16 @@ function AppLayout() {
             estado: data.estado,
             fechaExpiracion: data.fecha_expiracion,
             plan: data.plan,
+            sessionToken: sesion.sessionToken,
           })
         );
+
+        // Actualizar actividad de la sesión en el servidor
+        if (sesion.sessionToken) {
+          await supabase.rpc("actualizar_actividad_sesion", {
+            p_session_token: sesion.sessionToken,
+          });
+        }
       } catch (err) {
         console.warn("[Heartbeat] Error verificando licencia en segundo plano:", err);
       }

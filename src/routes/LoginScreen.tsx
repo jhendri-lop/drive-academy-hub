@@ -61,7 +61,31 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccess, onLicenseEx
 
       console.log("[DEBUG Login] RPC respuesta:", rpcData);
 
-      // 3. Guardar sesión en Zustand con datos de la escuela obtenidos vía RPC
+      // 3. Generar token único de sesión y registrar el dispositivo
+      const sessionToken = `${rpcData.id}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+      const { data: sessionData, error: sessionError } = await supabase.rpc(
+        "registrar_sesion",
+        {
+          p_escuela_id: rpcData.id,
+          p_session_token: sessionToken,
+          p_device_info: navigator.userAgent || "Windows Desktop",
+        }
+      );
+
+      if (sessionError || (sessionData && sessionData.success === false)) {
+        const errorLimitMsg =
+          sessionData?.error ||
+          sessionData?.message ||
+          sessionError?.message ||
+          "No se pudo iniciar sesión. Límite de dispositivos alcanzado (máx. 2).";
+        console.error("[LoginScreen] Límite de sesiones o error de registro:", sessionError || sessionData);
+        setErrorMsg(errorLimitMsg);
+        setLoading(false);
+        return;
+      }
+
+      // 4. Guardar sesión en Zustand con datos de la escuela obtenidos vía RPC y sessionToken
       setSesion({
         email: authData.user.email || email.trim(),
         escuelaId: rpcData.id,
@@ -70,6 +94,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccess, onLicenseEx
         plan: rpcData.plan,
         estado: rpcData.estado,
         fechaExpiracion: rpcData.fecha_expiracion,
+        sessionToken: sessionToken,
       });
 
       localStorage.setItem(
@@ -79,6 +104,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccess, onLicenseEx
           estado: rpcData.estado,
           fechaExpiracion: rpcData.fecha_expiracion,
           plan: rpcData.plan,
+          sessionToken: sessionToken,
         })
       );
 
@@ -117,6 +143,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccess, onLicenseEx
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRegister = (e: React.MouseEvent) => {
+    e.preventDefault();
+    window.open("https://driveoffice.zentriumph.com/mi-cuenta", "_blank");
   };
 
   return (
@@ -178,7 +209,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccess, onLicenseEx
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-semibold py-3 px-4 rounded-xl shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full mt-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-semibold py-3 px-4 rounded-xl shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
             {loading ? (
               <>
@@ -194,10 +225,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccess, onLicenseEx
         {/* Footer Link */}
         <div className="mt-8 text-center border-t border-slate-800/80 pt-6">
           <a
-            href="https://driveoffice.zentriumph.com"
+            href="https://driveoffice.zentriumph.com/mi-cuenta"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-blue-400 transition-colors"
+            onClick={handleRegister}
+            className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-blue-400 transition-colors cursor-pointer"
           >
             ¿No tienes cuenta? Regístrate en driveoffice.zentriumph.com
             <ExternalLink className="w-3.5 h-3.5" />
