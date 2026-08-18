@@ -13,7 +13,7 @@ export const LicenseLockScreen: React.FC<LicenseLockScreenProps> = ({ mensaje })
 
   const handleRenovar = () => {
     const email = sesion?.email || "";
-    const baseUrl = "https://zentriumph.com/mi-cuenta";
+    const baseUrl = "https://driveoffice.zentriumph.com/mi-cuenta";
     const url = email ? `${baseUrl}?email=${encodeURIComponent(email)}` : baseUrl;
     const link = document.createElement("a");
     link.href = url;

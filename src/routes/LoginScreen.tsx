@@ -194,12 +194,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccess, onLicenseEx
         {/* Footer Link */}
         <div className="mt-8 text-center border-t border-slate-800/80 pt-6">
           <a
-            href="https://zentriumph.com"
+            href="https://driveoffice.zentriumph.com"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-blue-400 transition-colors"
           >
-            ¿No tienes cuenta? Regístrate en zentriumph.com
+            ¿No tienes cuenta? Regístrate en driveoffice.zentriumph.com
             <ExternalLink className="w-3.5 h-3.5" />
           </a>
         </div>
