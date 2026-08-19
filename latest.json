@@ -1,11 +1,11 @@
 {
-  "version": "v2.0.0",
-  "notes": "Lanzamiento oficial de Zentriumph-DriveOfice con sistema de licencias y plantillas editables.",
-  "pub_date": "2026-08-18T17:00:00Z",
+  "version": "v2.0.1",
+  "notes": "Corrección de links, auto-updater y límite de 2 dispositivos",
+  "pub_date": "2026-08-19T20:00:00Z",
   "platforms": {
     "windows-x86_64": {
       "signature": "",
-      "url": "https://github.com/jhendri-lop/drive-academy-hub/releases/download/v2.0.0/Zentriumph-DriveOfice_2.0.0_x64-setup.exe"
+      "url": "https://github.com/jhendri-lop/drive-academy-hub/releases/download/v2.0.1/Zentriumph-DriveOfice_2.0.1_x64-setup.exe"
     }
   }
 }
